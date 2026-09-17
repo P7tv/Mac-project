@@ -113,27 +113,82 @@ public final class AudioCaptureEngine: NSObject, SCStreamOutput, SCStreamDelegat
     // MARK: - SCStreamOutput
     public func stream(_ stream: SCStream, didOutputSampleBuffer sampleBuffer: CMSampleBuffer, of type: SCStreamOutputType) {
         guard type == .audio, isCapturing else { return }
-        guard let blockBuffer = CMSampleBufferGetDataBuffer(sampleBuffer) else { return }
+        guard sampleBuffer.isValid else { return }
 
-        let length = CMBlockBufferGetDataLength(blockBuffer)
-        guard length > 0 else { return }
+        guard let formatDesc = CMSampleBufferGetFormatDescription(sampleBuffer),
+              let asbd = CMAudioFormatDescriptionGetStreamBasicDescription(formatDesc) else { return }
 
-        var rawData = Data(count: length)
-        rawData.withUnsafeMutableBytes { ptr in
-            _ = CMBlockBufferCopyDataBytes(blockBuffer, atOffset: 0, dataLength: length, destination: ptr.baseAddress!)
-        }
+        var blockBuffer: CMBlockBuffer?
+        let ablSize = MemoryLayout<AudioBufferList>.size + MemoryLayout<AudioBuffer>.size * 4
+        let ablPtr = UnsafeMutableRawPointer.allocate(byteCount: ablSize, alignment: MemoryLayout<AudioBufferList>.alignment)
+        defer { ablPtr.deallocate() }
 
-        // Check format description: if float32, convert to int16
+        let bufferList = ablPtr.bindMemory(to: AudioBufferList.self, capacity: 1)
+
+        let status = CMSampleBufferGetAudioBufferListWithRetainedBlockBuffer(
+            sampleBuffer,
+            bufferListSizeNeededOut: nil,
+            bufferListOut: bufferList,
+            bufferListSize: ablSize,
+            blockBufferAllocator: nil,
+            blockBufferMemoryAllocator: nil,
+            flags: 0,
+            blockBufferOut: &blockBuffer
+        )
+
+        guard status == noErr else { return }
+
+        let buffers = UnsafeMutableAudioBufferListPointer(bufferList)
+        guard !buffers.isEmpty else { return }
+
         var pcm16Data: Data
-        if let formatDesc = CMSampleBufferGetFormatDescription(sampleBuffer),
-           let asbd = CMAudioFormatDescriptionGetStreamBasicDescription(formatDesc) {
-            if asbd.pointee.mFormatFlags & kAudioFormatFlagIsFloat != 0 {
-                pcm16Data = convertFloat32ToInt16(rawData: rawData, channelCount: Int(asbd.pointee.mChannelsPerFrame))
+
+        if buffers.count >= 2,
+           let leftData = buffers[0].mData,
+           let rightData = buffers[1].mData {
+            // Non-interleaved stereo Float32 -> Interleaved Int16
+            let frames = Int(buffers[0].mDataByteSize) / MemoryLayout<Float32>.size
+            let leftFloats = leftData.assumingMemoryBound(to: Float32.self)
+            let rightFloats = rightData.assumingMemoryBound(to: Float32.self)
+
+            var samples = [Int16]()
+            samples.reserveCapacity(frames * 2)
+            for i in 0..<frames {
+                let l = Int16(clamping: Int(leftFloats[i] * 32767.0))
+                let r = Int16(clamping: Int(rightFloats[i] * 32767.0))
+                samples.append(l)
+                samples.append(r)
+            }
+            pcm16Data = samples.withUnsafeBufferPointer { Data(buffer: $0) }
+        } else if let dataPtr = buffers[0].mData {
+            // Interleaved Float32 or Int16
+            let channels = Int(asbd.pointee.mChannelsPerFrame)
+            let isFloat = (asbd.pointee.mFormatFlags & kAudioFormatFlagIsFloat) != 0
+
+            if isFloat {
+                let floatPtr = dataPtr.assumingMemoryBound(to: Float32.self)
+                let sampleCount = Int(buffers[0].mDataByteSize) / MemoryLayout<Float32>.size
+                var samples = [Int16]()
+                samples.reserveCapacity(channels == 1 ? sampleCount * 2 : sampleCount)
+
+                if channels == 1 {
+                    for i in 0..<sampleCount {
+                        let s = Int16(clamping: Int(floatPtr[i] * 32767.0))
+                        samples.append(s)
+                        samples.append(s)
+                    }
+                } else {
+                    for i in 0..<sampleCount {
+                        let s = Int16(clamping: Int(floatPtr[i] * 32767.0))
+                        samples.append(s)
+                    }
+                }
+                pcm16Data = samples.withUnsafeBufferPointer { Data(buffer: $0) }
             } else {
-                pcm16Data = rawData
+                pcm16Data = Data(bytes: dataPtr, count: Int(buffers[0].mDataByteSize))
             }
         } else {
-            pcm16Data = rawData
+            return
         }
 
         let rms = AudioPacket.calculateRMS(pcm16Data: pcm16Data)

@@ -396,6 +396,7 @@ public enum WebAudioPlayer {
                 this.readPtr = 0;
                 this.bufferedFrames = 0;
                 this.targetFrames = 2880; // default Balanced 60ms
+                this.isBuffering = true;  // Wait until buffer reaches target to avoid initial stutter
                 this.reportCounter = 0;
 
                 this.port.onmessage = (e) => {
@@ -408,13 +409,14 @@ public enum WebAudioPlayer {
                         this.writePtr = 0;
                         this.readPtr = 0;
                         this.bufferedFrames = 0;
+                        this.isBuffering = true;
                     }
                 };
             }
 
             pushPCM(left, right) {
                 const len = left.length;
-                // Buffer overflow protection: drop oldest samples
+                // Buffer overflow protection: drop oldest samples if backlog exceeds capacity
                 if (this.bufferedFrames + len > this.capacity) {
                     const drop = (this.bufferedFrames + len) - this.capacity + 2400;
                     this.readPtr = (this.readPtr + drop) % this.capacity;
@@ -427,13 +429,18 @@ public enum WebAudioPlayer {
                     this.writePtr = (this.writePtr + 1) % this.capacity;
                 }
                 this.bufferedFrames += len;
+
+                // End initial pre-buffering when target frames accumulated
+                if (this.isBuffering && this.bufferedFrames >= this.targetFrames) {
+                    this.isBuffering = false;
+                }
             }
 
             process(inputs, outputs, parameters) {
                 const output = outputs[0];
                 const outL = output[0];
                 const outR = output[1] || output[0];
-                const quantum = outL.length;
+                const quantum = outL.length; // 128 frames
 
                 this.reportCounter++;
                 if (this.reportCounter % 20 === 0) {
@@ -441,41 +448,30 @@ public enum WebAudioPlayer {
                     this.port.postMessage({ type: 'metrics', ms: ms });
                 }
 
-                // Buffer underrun: soft zero fill
-                if (this.bufferedFrames < quantum) {
+                // If pre-buffering or buffer underrun, fill silence softly
+                if (this.isBuffering || this.bufferedFrames < quantum) {
                     outL.fill(0);
                     outR.fill(0);
+                    if (this.bufferedFrames < 64) {
+                        this.isBuffering = true; // wait for buffer buildup
+                    }
                     return true;
                 }
 
-                // Adaptive Clock Drift Correction
-                // If buffered frames exceed target by > 720 frames (15ms), gently skip 1 frame every 48 frames (~2% speedup)
-                // If buffered frames lag target by > 720 frames, repeat 1 frame every 48 frames (~2% slowdown)
-                let skipInterval = 0;
-                if (this.bufferedFrames > this.targetFrames + 720) {
-                    skipInterval = 48; // speedup
-                } else if (this.bufferedFrames < this.targetFrames - 720 && this.bufferedFrames > quantum * 2) {
-                    skipInterval = -48; // slowdown
+                // Smooth clock drift adjustment (ONCE per quantum, pure pitch-neutral)
+                // If queue is growing > 30ms beyond target, consume 1 extra frame per 128 frames (~0.7% speedup)
+                if (this.bufferedFrames > this.targetFrames + 1440) {
+                    this.readPtr = (this.readPtr + 1) % this.capacity;
+                    this.bufferedFrames--;
                 }
 
+                // Sequential clean audio output without index skipping
                 for (let i = 0; i < quantum; i++) {
                     outL[i] = this.bufferL[this.readPtr];
                     outR[i] = this.bufferR[this.readPtr];
                     this.readPtr = (this.readPtr + 1) % this.capacity;
-                    this.bufferedFrames--;
-
-                    if (skipInterval > 0 && (i % skipInterval === 0) && this.bufferedFrames > 1) {
-                        this.readPtr = (this.readPtr + 1) % this.capacity;
-                        this.bufferedFrames--;
-                    } else if (skipInterval < 0 && (i % (-skipInterval) === 0)) {
-                        // Repeat frame softly
-                        i++;
-                        if (i < quantum) {
-                            outL[i] = outL[i - 1];
-                            outR[i] = outR[i - 1];
-                        }
-                    }
                 }
+                this.bufferedFrames -= quantum;
 
                 return true;
             }
