@@ -1,0 +1,125 @@
+import Foundation
+import SwiftUI
+import AppKit
+import Combine
+
+@MainActor
+public final class DeskExtendViewModel: ObservableObject {
+    @Published public var isStreaming: Bool = false
+    @Published public var selectedResolution: DisplayResolution = .fullHD
+    @Published public var targetFPS: Int = 60
+    @Published public var streamQuality: Double = 0.8
+    @Published public var networkAddresses: [NetworkAddress] = []
+    @Published public var connectedClients: Int = 0
+    @Published public var latestPreviewImage: NSImage? = nil
+    @Published public var activeDisplayID: CGDirectDisplayID? = nil
+    @Published public var alertMessage: String? = nil
+    @Published public var port: UInt16 = 8080
+
+    private let virtualDisplayManager = VirtualDisplayManager()
+    private let captureEngine = ScreenCaptureEngine()
+    private var streamServer: StreamServer?
+
+    public init() {
+        refreshNetworkAddresses()
+    }
+
+    public func refreshNetworkAddresses() {
+        self.networkAddresses = NetworkInterfaceHelper.getLocalIPAddresses(port: port)
+    }
+
+    public func toggleStreaming() {
+        if isStreaming {
+            stopStreaming()
+        } else {
+            Task {
+                await startStreaming()
+            }
+        }
+    }
+
+    public func startStreaming() async {
+        guard !isStreaming else { return }
+
+        // 1. Request Screen Capture permission if needed
+        if !ScreenCaptureEngine.hasScreenRecordingPermission() {
+            ScreenCaptureEngine.requestScreenRecordingPermission()
+        }
+
+        // 2. Start Virtual Display
+        let config = DisplayConfig(
+            resolution: selectedResolution,
+            refreshRate: Double(targetFPS),
+            hiDPI: false,
+            displayName: "DeskExtend Display"
+        )
+
+        guard let displayID = virtualDisplayManager.start(config: config) else {
+            alertMessage = "Failed to create Virtual Display. Check macOS permissions."
+            return
+        }
+
+        self.activeDisplayID = displayID
+
+        // 3. Start Embedded HTTP & WebSocket Server
+        let server = StreamServer(port: port)
+        server.onClientCountChanged = { [weak self] count in
+            self?.connectedClients = count
+        }
+
+        do {
+            try server.start()
+            self.streamServer = server
+        } catch {
+            virtualDisplayManager.stop()
+            alertMessage = "Failed to start local server on port \(port): \(error.localizedDescription)"
+            return
+        }
+
+        // 4. Start Screen Capture Engine
+        do {
+            try await captureEngine.startCapture(
+                displayID: displayID,
+                fps: targetFPS,
+                quality: streamQuality
+            ) { [weak self] frameData, preview in
+                server.broadcastFrame(imageData: frameData)
+                if let preview = preview {
+                    DispatchQueue.main.async {
+                        self?.latestPreviewImage = preview
+                    }
+                }
+            }
+        } catch {
+            print("[DeskExtendViewModel] Capture error: \(error.localizedDescription)")
+        }
+
+        refreshNetworkAddresses()
+        self.isStreaming = true
+        self.alertMessage = nil
+    }
+
+    public func stopStreaming() {
+        captureEngine.stopCapture()
+        streamServer?.stop()
+        streamServer = nil
+        virtualDisplayManager.stop()
+
+        self.activeDisplayID = nil
+        self.isStreaming = false
+        self.connectedClients = 0
+        self.latestPreviewImage = nil
+    }
+
+    public func openDisplaySettings() {
+        if let url = URL(string: "x-apple.systempreferences:com.apple.Displays-Settings.extension") {
+            NSWorkspace.shared.open(url)
+        }
+    }
+
+    public func copyURLToClipboard(url: String) {
+        let pasteboard = NSPasteboard.general
+        pasteboard.clearContents()
+        pasteboard.setString(url, forType: .string)
+    }
+}
