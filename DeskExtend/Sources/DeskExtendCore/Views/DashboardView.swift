@@ -82,6 +82,10 @@ public struct DashboardView: View {
                                     Text("เพื่อให้ macOS ส่งภาพของจอที่ 2 ไปยังเบราว์เซอร์ได้ กรุณากดปุ่มด้านล่างเพื่อเปิด System Settings และเปิดสวิตช์ DeskExtend")
                                         .font(.system(size: 11))
                                         .foregroundColor(.secondary)
+
+                                    Text("💡 หากเปิดสวิตช์ไว้อยู่แล้ว: ให้ลองปิดแล้วเปิดสวิตช์ DeskExtend ใหม่อีก 1 ครั้งเพื่อให้ macOS รีเฟรช")
+                                        .font(.system(size: 10))
+                                        .foregroundColor(.orange.opacity(0.9))
                                 }
                             }
 

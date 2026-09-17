@@ -34,6 +34,16 @@ public final class DeskExtendViewModel: ObservableObject {
                 self?.alertMessage = "การส่งภาพหยุดทำงาน: \(error.localizedDescription)"
             }
         }
+        NotificationCenter.default.addObserver(
+            forName: NSApplication.didBecomeActiveNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor in
+                self?.checkPermissions()
+                self?.refreshNetworkAddresses()
+            }
+        }
     }
 
     public func checkPermissions() {
@@ -73,10 +83,6 @@ public final class DeskExtendViewModel: ObservableObject {
             ScreenCaptureEngine.requestScreenRecordingPermission()
         }
         checkPermissions()
-        guard hasScreenRecordingPermission else {
-            alertMessage = ScreenCaptureError.permissionRequired.localizedDescription
-            return
-        }
 
         // 2. Start Virtual Display
         let config = DisplayConfig(
