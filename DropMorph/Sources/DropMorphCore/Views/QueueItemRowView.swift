@@ -23,15 +23,17 @@ public struct QueueItemRowView: View {
                         .frame(width: 44, height: 44)
                         .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
                 } else {
-                    RoundedRectangle(cornerRadius: 8, style: .continuous)
-                        .fill(Color.secondary.opacity(0.15))
-                        .frame(width: 44, height: 44)
-                        .overlay(
-                            Image(systemName: "photo")
-                                .foregroundColor(.secondary)
-                        )
+                    let fileIcon = NSWorkspace.shared.icon(forFile: item.inputURL.path)
+                    Image(nsImage: fileIcon)
+                        .resizable()
+                        .aspectRatio(contentMode: .fit)
+                        .frame(width: 40, height: 40)
+                        .padding(2)
                 }
             }
+            .frame(width: 44, height: 44)
+            .background(Color.primary.opacity(0.04))
+            .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
             .overlay(
                 RoundedRectangle(cornerRadius: 8, style: .continuous)
                     .stroke(Color.primary.opacity(0.08), lineWidth: 1)

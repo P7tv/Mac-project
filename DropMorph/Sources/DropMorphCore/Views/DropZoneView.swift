@@ -93,11 +93,11 @@ public struct DropZoneView: View {
                     }
 
                     VStack(spacing: 4) {
-                        Text(isTargeted ? "Release to Convert!" : "Drag & Drop Images Here")
+                        Text(isTargeted ? "Release to Convert!" : "Drag & Drop Files Here")
                             .font(.system(size: 16, weight: .semibold))
                             .foregroundColor(.primary)
 
-                        Text("PNG, JPEG, WebP, HEIC, TIFF, BMP, or whole folders")
+                        Text("Images, Videos (MP4/MOV), Camera RAW, SVG, PDF, or folders")
                             .font(.system(size: 12))
                             .foregroundColor(.secondary)
                     }
@@ -128,7 +128,7 @@ public struct DropZoneView: View {
         }
         .fileImporter(
             isPresented: $isFileImporterPresented,
-            allowedContentTypes: [.image, .folder],
+            allowedContentTypes: [.item, .folder, .image, .movie, .video, .pdf, .svg, .rawImage],
             allowsMultipleSelection: true
         ) { result in
             switch result {
