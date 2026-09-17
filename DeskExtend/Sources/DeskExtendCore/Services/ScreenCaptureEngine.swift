@@ -5,6 +5,7 @@ import CoreMedia
 import ImageIO
 import UniformTypeIdentifiers
 import AppKit
+import VideoToolbox
 
 public enum ScreenCaptureError: LocalizedError {
     case permissionRequired
@@ -85,6 +86,7 @@ public final class ScreenCaptureEngine: NSObject, SCStreamOutput, SCStreamDelega
         config.height = scDisplay.height
         config.minimumFrameInterval = CMTime(value: 1, timescale: Int32(fps))
         config.pixelFormat = kCVPixelFormatType_32BGRA
+        config.colorSpaceName = CGColorSpace.sRGB
         config.showsCursor = true
         config.queueDepth = 3
 
@@ -135,36 +137,22 @@ public final class ScreenCaptureEngine: NSObject, SCStreamOutput, SCStreamDelega
 
         guard let imageBuffer = CMSampleBufferGetImageBuffer(sampleBuffer) else { return }
 
-        CVPixelBufferLockBaseAddress(imageBuffer, .readOnly)
-        defer { CVPixelBufferUnlockBaseAddress(imageBuffer, .readOnly) }
+        // Fast zero-copy hardware CGImage extraction via VideoToolbox
+        var extractedCGImage: CGImage?
+        let vtStatus = VTCreateCGImageFromCVPixelBuffer(imageBuffer, options: nil, imageOut: &extractedCGImage)
+        guard vtStatus == noErr, let cgImage = extractedCGImage else { return }
 
-        let width = CVPixelBufferGetWidth(imageBuffer)
-        let height = CVPixelBufferGetHeight(imageBuffer)
-        let bytesPerRow = CVPixelBufferGetBytesPerRow(imageBuffer)
-        guard let baseAddress = CVPixelBufferGetBaseAddress(imageBuffer) else { return }
+        let width = cgImage.width
+        let height = cgImage.height
 
-        let colorSpace = CGColorSpaceCreateDeviceRGB()
-        let bitmapInfo = CGBitmapInfo(rawValue: CGBitmapInfo.byteOrder32Little.rawValue | CGImageAlphaInfo.premultipliedFirst.rawValue)
-
-        guard let context = CGContext(
-            data: baseAddress,
-            width: width,
-            height: height,
-            bitsPerComponent: 8,
-            bytesPerRow: bytesPerRow,
-            space: colorSpace,
-            bitmapInfo: bitmapInfo.rawValue
-        ), let cgImage = context.makeImage() else {
-            return
-        }
-
-        // Compress to JPEG for high-speed network transmission
+        // High-fidelity hardware JPEG compression
         let jpegData = NSMutableData()
         guard let destination = CGImageDestinationCreateWithData(jpegData as CFMutableData, UTType.jpeg.identifier as CFString, 1, nil) else {
             return
         }
         let props: [CFString: Any] = [
-            kCGImageDestinationLossyCompressionQuality: quality
+            kCGImageDestinationLossyCompressionQuality: quality,
+            kCGImageDestinationOptimizeColorForSharing: kCFBooleanTrue as Any
         ]
         CGImageDestinationAddImage(destination, cgImage, props as CFDictionary)
         guard CGImageDestinationFinalize(destination) else { return }

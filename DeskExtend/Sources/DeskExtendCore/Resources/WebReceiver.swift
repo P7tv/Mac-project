@@ -24,6 +24,9 @@ public struct WebReceiver {
           object-fit: contain;
           display: block;
           image-rendering: -webkit-optimize-contrast;
+          image-rendering: crisp-edges;
+          transform: translateZ(0);
+          backface-visibility: hidden;
         }
         #hud {
           position: fixed;
@@ -181,7 +184,10 @@ public struct WebReceiver {
 
             const blob = new Blob([data], { type: 'image/jpeg' });
             try {
-              const imageBitmap = await createImageBitmap(blob);
+              const imageBitmap = await createImageBitmap(blob, {
+                premultiplyAlpha: 'none',
+                colorSpaceConversion: 'none'
+              });
               if (ws.readyState !== WebSocket.OPEN) {
                 imageBitmap.close();
                 return;
