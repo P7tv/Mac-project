@@ -6,9 +6,12 @@ import Combine
 @MainActor
 public final class DeskExtendViewModel: ObservableObject {
     @Published public var isStreaming: Bool = false
+    @Published public var isStarting: Bool = false
     @Published public var selectedResolution: DisplayResolution = .fullHD
     @Published public var targetFPS: Int = 60
-    @Published public var streamQuality: Double = 0.8
+    @Published public var streamQuality: Double = 0.6 {
+        didSet { captureEngine.updateQuality(streamQuality) }
+    }
     @Published public var networkAddresses: [NetworkAddress] = []
     @Published public var connectedClients: Int = 0
     @Published public var latestPreviewImage: NSImage? = nil
@@ -24,6 +27,13 @@ public final class DeskExtendViewModel: ObservableObject {
     public init() {
         refreshNetworkAddresses()
         checkPermissions()
+        captureEngine.onCaptureError = { [weak self] error in
+            Task { @MainActor in
+                self?.stopStreaming()
+                self?.checkPermissions()
+                self?.alertMessage = "การส่งภาพหยุดทำงาน: \(error.localizedDescription)"
+            }
+        }
     }
 
     public func checkPermissions() {
@@ -42,6 +52,7 @@ public final class DeskExtendViewModel: ObservableObject {
     }
 
     public func toggleStreaming() {
+        guard !isStarting else { return }
         if isStreaming {
             stopStreaming()
         } else {
@@ -52,11 +63,19 @@ public final class DeskExtendViewModel: ObservableObject {
     }
 
     public func startStreaming() async {
-        guard !isStreaming else { return }
+        guard !isStreaming, !isStarting else { return }
+        isStarting = true
+        defer { isStarting = false }
+        alertMessage = nil
 
         // 1. Request Screen Capture permission if needed
         if !ScreenCaptureEngine.hasScreenRecordingPermission() {
             ScreenCaptureEngine.requestScreenRecordingPermission()
+        }
+        checkPermissions()
+        guard hasScreenRecordingPermission else {
+            alertMessage = ScreenCaptureError.permissionRequired.localizedDescription
+            return
         }
 
         // 2. Start Virtual Display
@@ -84,7 +103,7 @@ public final class DeskExtendViewModel: ObservableObject {
             try server.start()
             self.streamServer = server
         } catch {
-            virtualDisplayManager.stop()
+            stopStreaming()
             alertMessage = "Failed to start local server on port \(port): \(error.localizedDescription)"
             return
         }
@@ -104,7 +123,10 @@ public final class DeskExtendViewModel: ObservableObject {
                 }
             }
         } catch {
-            print("[DeskExtendViewModel] Capture error: \(error.localizedDescription)")
+            stopStreaming()
+            checkPermissions()
+            alertMessage = "เริ่มส่งภาพจอที่สองไม่ได้: \(error.localizedDescription)"
+            return
         }
 
         refreshNetworkAddresses()

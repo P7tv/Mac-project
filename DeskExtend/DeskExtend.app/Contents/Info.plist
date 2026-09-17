@@ -26,5 +26,7 @@
     <true/>
     <key>NSLocalNetworkUsageDescription</key>
     <string>DeskExtend uses local network to stream the secondary virtual display to your other monitor.</string>
+    <key>NSScreenRecordingUsageDescription</key>
+    <string>DeskExtend requires screen recording permission to stream the secondary virtual display to your other monitor.</string>
 </dict>
 </plist>

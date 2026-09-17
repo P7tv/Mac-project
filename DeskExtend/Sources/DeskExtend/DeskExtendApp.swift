@@ -14,6 +14,9 @@ struct DeskExtendApp: App {
                     NSApp.setActivationPolicy(.regular)
                     NSApp.activate(ignoringOtherApps: true)
                 }
+                .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
+                    viewModel.checkPermissions()
+                }
         }
         .windowStyle(.hiddenTitleBar)
         .windowResizability(.contentMinSize)
@@ -32,6 +35,7 @@ struct DeskExtendApp: App {
                 Button(viewModel.isStreaming ? "Stop Display" : "Start Display") {
                     viewModel.toggleStreaming()
                 }
+                .disabled(viewModel.isStarting)
 
                 if let firstURL = viewModel.networkAddresses.first?.urlString {
                     Button("Copy URL: \(firstURL)") {

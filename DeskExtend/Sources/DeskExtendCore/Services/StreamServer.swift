@@ -7,6 +7,8 @@ public final class StreamServer: @unchecked Sendable {
     private let port: UInt16
     private var connections: [UUID: NWConnection] = [:]
     private var webSocketConnections: Set<UUID> = []
+    private var framePacers: [UUID: FramePacer] = [:]
+    private var receiverParsers: [UUID: ReceiverControlParser] = [:]
     private let queue = DispatchQueue(label: "com.deskextend.streamserver", qos: .userInteractive)
     private let lock = NSLock()
 
@@ -26,7 +28,9 @@ public final class StreamServer: @unchecked Sendable {
     public func start() throws {
         guard !isRunning else { return }
 
-        let params = NWParameters.tcp
+        let tcp = NWProtocolTCP.Options()
+        tcp.noDelay = true
+        let params = NWParameters(tls: nil, tcp: tcp)
         params.allowLocalEndpointReuse = true
 
         guard let nwPort = NWEndpoint.Port(rawValue: port) else {
@@ -68,6 +72,8 @@ public final class StreamServer: @unchecked Sendable {
         }
         connections.removeAll()
         webSocketConnections.removeAll()
+        framePacers.removeAll()
+        receiverParsers.removeAll()
         onClientCountChanged?(0)
     }
 
@@ -96,6 +102,8 @@ public final class StreamServer: @unchecked Sendable {
         lock.lock()
         connections.removeValue(forKey: id)
         let wasWebSocket = webSocketConnections.remove(id) != nil
+        framePacers.removeValue(forKey: id)
+        receiverParsers.removeValue(forKey: id)
         let count = webSocketConnections.count
         lock.unlock()
 
@@ -123,6 +131,13 @@ public final class StreamServer: @unchecked Sendable {
     }
 
     private func handleIncomingData(_ data: Data, connection: NWConnection, id: UUID) {
+        lock.lock()
+        let isWebSocket = webSocketConnections.contains(id)
+        lock.unlock()
+        if isWebSocket {
+            handleReceiverControl(data, connection: connection, id: id)
+            return
+        }
         guard let requestString = String(data: data, encoding: .utf8) else { return }
 
         // Check for WebSocket Upgrade
@@ -164,19 +179,25 @@ public final class StreamServer: @unchecked Sendable {
         let magic = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11"
         let digest = Insecure.SHA1.hash(data: Data((key + magic).utf8))
         let acceptKey = Data(digest).base64EncodedString()
+        let protocols = requestString.components(separatedBy: "\r\n")
+            .first { $0.lowercased().hasPrefix("sec-websocket-protocol:") }?
+            .split(separator: ":", maxSplits: 1).last?
+            .split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) } ?? []
+        let requiresAck = protocols.contains("deskextend-v1")
+        let protocolHeader = requiresAck ? "Sec-WebSocket-Protocol: deskextend-v1\r\n" : ""
 
-        let handshakeResponse = """
-        HTTP/1.1 101 Switching Protocols\r
-        Upgrade: websocket\r
-        Connection: Upgrade\r
-        Sec-WebSocket-Accept: \(acceptKey)\r
-        \r\n
-        """
+        let handshakeResponse = "HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Accept: \(acceptKey)\r\n\(protocolHeader)\r\n"
 
         connection.send(content: Data(handshakeResponse.utf8), completion: .contentProcessed { [weak self] error in
             guard let self = self, error == nil else { return }
             self.lock.lock()
+            guard self.connections[id] === connection else {
+                self.lock.unlock()
+                return
+            }
             self.webSocketConnections.insert(id)
+            self.framePacers[id] = FramePacer(requiresAcknowledgement: requiresAck)
+            self.receiverParsers[id] = ReceiverControlParser()
             let count = self.webSocketConnections.count
             self.lock.unlock()
 
@@ -201,10 +222,59 @@ public final class StreamServer: @unchecked Sendable {
 
         for id in clientIDs {
             lock.lock()
-            let conn = connections[id]
+            let ready = framePacers[id]?.offer(packet)
             lock.unlock()
+            if let ready { sendFrame(ready, to: id) }
+        }
+    }
 
-            conn?.send(content: packet, completion: .contentProcessed { _ in })
+    private func sendFrame(_ packet: Data, to id: UUID) {
+        lock.lock()
+        let connection = connections[id]
+        lock.unlock()
+        connection?.send(content: packet, completion: .contentProcessed { [weak self] error in
+            guard let self else { return }
+            if error != nil {
+                connection?.cancel()
+                self.removeConnection(id: id)
+                return
+            }
+            self.lock.lock()
+            let next = self.framePacers[id]?.sent()
+            self.lock.unlock()
+            if let next { self.sendFrame(next, to: id) }
+        })
+    }
+
+    private func handleReceiverControl(_ data: Data, connection: NWConnection, id: UUID) {
+        let messages: [ReceiverControlParser.Message]
+        lock.lock()
+        do {
+            messages = try receiverParsers[id]?.append(data) ?? []
+            lock.unlock()
+        } catch {
+            lock.unlock()
+            connection.cancel()
+            removeConnection(id: id)
+            return
+        }
+        for message in messages {
+            switch message.opcode {
+            case 2 where message.payload == Data([1]):
+                lock.lock()
+                let next = framePacers[id]?.acknowledge()
+                lock.unlock()
+                if let next { sendFrame(next, to: id) }
+            case 8:
+                connection.cancel()
+                removeConnection(id: id)
+            case 9:
+                var pong = Data([0x8A, UInt8(message.payload.count)])
+                pong.append(message.payload)
+                connection.send(content: pong, completion: .contentProcessed { _ in })
+            default:
+                break
+            }
         }
     }
 

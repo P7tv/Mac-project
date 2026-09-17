@@ -133,7 +133,7 @@ public struct DashboardView: View {
                         HStack(spacing: 10) {
                             Image(systemName: viewModel.isStreaming ? "stop.circle.fill" : "play.circle.fill")
                                 .font(.system(size: 20, weight: .bold))
-                            Text(viewModel.isStreaming ? "Stop Extended Display" : "Start Extended Display")
+                            Text(viewModel.isStarting ? "Starting Extended Display…" : (viewModel.isStreaming ? "Stop Extended Display" : "Start Extended Display"))
                                 .font(.system(size: 14, weight: .bold))
                         }
                         .frame(maxWidth: .infinity)
@@ -150,6 +150,7 @@ public struct DashboardView: View {
                         .shadow(color: viewModel.isStreaming ? Color.red.opacity(0.3) : Color.blue.opacity(0.3), radius: 8, y: 3)
                     }
                     .buttonStyle(.plain)
+                    .disabled(viewModel.isStarting)
 
                     // Live Screen Preview Area
                     if viewModel.isStreaming {

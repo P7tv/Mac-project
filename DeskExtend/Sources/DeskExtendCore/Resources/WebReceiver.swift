@@ -107,7 +107,7 @@ public struct WebReceiver {
 
       <script>
         const canvas = document.getElementById('screen');
-        const ctx = canvas.getContext('2d', { alpha: false });
+        const ctx = canvas.getContext('2d', { alpha: false, desynchronized: true });
         const hud = document.getElementById('hud');
         const statusDot = document.getElementById('statusDot');
         const fpsCounter = document.getElementById('fpsCounter');
@@ -142,24 +142,50 @@ public struct WebReceiver {
         function connect() {
           statusDot.className = 'dot connecting';
           const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
-          const ws = new WebSocket(`${proto}//${location.host}/stream`);
+          const ws = new WebSocket(`${proto}//${location.host}/stream`, 'deskextend-v1');
           ws.binaryType = 'arraybuffer';
+          let latestFrame = null;
+          let decoding = false;
 
           ws.onopen = () => {
             statusDot.className = 'dot';
             resetHudTimer();
           };
 
-          ws.onmessage = async (event) => {
+          async function renderLatestFrame() {
+            if (decoding) return;
+            decoding = true;
+            try {
+              while (latestFrame !== null && ws.readyState === WebSocket.OPEN) {
+                const data = latestFrame;
+                latestFrame = null;
+                await renderFrame(data);
+              }
+            } finally {
+              decoding = false;
+            }
+          }
+
+          ws.onmessage = (event) => {
+            // Older frames waiting for decode are replaced by the newest one.
+            latestFrame = event.data;
+            void renderLatestFrame();
+          };
+
+          async function renderFrame(data) {
             if (isFirstFrame) {
               isFirstFrame = false;
               overlay.style.opacity = '0';
               setTimeout(() => overlay.style.display = 'none', 300);
             }
 
-            const blob = new Blob([event.data], { type: 'image/jpeg' });
+            const blob = new Blob([data], { type: 'image/jpeg' });
             try {
               const imageBitmap = await createImageBitmap(blob);
+              if (ws.readyState !== WebSocket.OPEN) {
+                imageBitmap.close();
+                return;
+              }
               if (canvas.width !== imageBitmap.width || canvas.height !== imageBitmap.height) {
                 canvas.width = imageBitmap.width;
                 canvas.height = imageBitmap.height;
@@ -178,10 +204,16 @@ public struct WebReceiver {
               }
             } catch (err) {
               // Frame decode error skip
+            } finally {
+              // Release the next frame only after this receiver has consumed it.
+              if (ws.readyState === WebSocket.OPEN && ws.protocol === 'deskextend-v1') {
+                ws.send(new Uint8Array([1]));
+              }
             }
-          };
+          }
 
           ws.onclose = () => {
+            latestFrame = null;
             statusDot.className = 'dot connecting';
             fpsCounter.innerText = 'Reconnecting...';
             setTimeout(connect, 1500);

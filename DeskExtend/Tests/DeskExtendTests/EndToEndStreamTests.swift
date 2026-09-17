@@ -140,6 +140,40 @@ final class EndToEndStreamTests: XCTestCase {
         wsTask.cancel(with: .normalClosure, reason: nil)
     }
 
+    func testAcknowledgedReceiverSkipsBacklog() async throws {
+        try server.start()
+        let connected = expectation(description: "Acknowledged receiver connects")
+        server.onClientCountChanged = { if $0 == 1 { connected.fulfill() } }
+        let url = URL(string: "ws://127.0.0.1:\(testPort)/stream")!
+        let client = URLSession.shared.webSocketTask(with: url, protocols: ["deskextend-v1"])
+        client.resume()
+        defer { client.cancel(with: .normalClosure, reason: nil) }
+        await fulfillment(of: [connected], timeout: 5)
+
+        let firstReceived = expectation(description: "First frame is delivered")
+        server.broadcastFrame(imageData: Data([1]))
+        client.receive { result in
+            if case .success(.data(let data)) = result {
+                XCTAssertEqual(data, Data([1]))
+            } else { XCTFail("First frame failed: \(result)") }
+            firstReceived.fulfill()
+        }
+        await fulfillment(of: [firstReceived], timeout: 5)
+
+        // The receiver has the first frame but has not acknowledged rendering it.
+        server.broadcastFrame(imageData: Data([2]))
+        server.broadcastFrame(imageData: Data([3]))
+        try await client.send(.data(Data([1])))
+        let newestReceived = expectation(description: "Newest frame replaces backlog")
+        client.receive { result in
+            if case .success(.data(let data)) = result {
+                XCTAssertEqual(data, Data([3]))
+            } else { XCTFail("Latest frame failed: \(result)") }
+            newestReceived.fulfill()
+        }
+        await fulfillment(of: [newestReceived], timeout: 5)
+    }
+
     func testNetworkInterfaceHelper() {
         let addresses = NetworkInterfaceHelper.getLocalIPAddresses(port: 8080)
         XCTAssertFalse(addresses.isEmpty, "Must detect at least one local address")
@@ -152,4 +186,3 @@ final class EndToEndStreamTests: XCTestCase {
         }
     }
 }
-
