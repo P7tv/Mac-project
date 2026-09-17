@@ -18,7 +18,13 @@ let package = Package(
     ],
     targets: [
         .target(
+            name: "DeskExtendBridge",
+            path: "Sources/DeskExtendBridge",
+            publicHeadersPath: "include"
+        ),
+        .target(
             name: "DeskExtendCore",
+            dependencies: ["DeskExtendBridge"],
             path: "Sources/DeskExtendCore"
         ),
         .executableTarget(
