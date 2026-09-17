@@ -30,11 +30,8 @@ public final class StreamServer: @unchecked Sendable {
 
         let tcp = NWProtocolTCP.Options()
         tcp.noDelay = true
-        tcp.enableKeepalive = true
-        tcp.keepaliveIdle = 2
         let params = NWParameters(tls: nil, tcp: tcp)
         params.allowLocalEndpointReuse = true
-        params.serviceClass = .responsiveData
 
         guard let nwPort = NWEndpoint.Port(rawValue: port) else {
             throw NSError(domain: "StreamServer", code: 1, userInfo: [NSLocalizedDescriptionKey: "Invalid port \(port)"])

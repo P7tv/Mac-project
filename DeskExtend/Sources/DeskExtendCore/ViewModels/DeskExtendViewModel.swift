@@ -9,7 +9,7 @@ public final class DeskExtendViewModel: ObservableObject {
     @Published public var isStarting: Bool = false
     @Published public var selectedResolution: DisplayResolution = .fullHD
     @Published public var targetFPS: Int = 60
-    @Published public var streamQuality: Double = 0.6 {
+    @Published public var streamQuality: Double = 0.8 {
         didSet { captureEngine.updateQuality(streamQuality) }
     }
     @Published public var networkAddresses: [NetworkAddress] = []
@@ -32,16 +32,6 @@ public final class DeskExtendViewModel: ObservableObject {
                 self?.stopStreaming()
                 self?.checkPermissions()
                 self?.alertMessage = "การส่งภาพหยุดทำงาน: \(error.localizedDescription)"
-            }
-        }
-        NotificationCenter.default.addObserver(
-            forName: NSApplication.didBecomeActiveNotification,
-            object: nil,
-            queue: .main
-        ) { [weak self] _ in
-            Task { @MainActor in
-                self?.checkPermissions()
-                self?.refreshNetworkAddresses()
             }
         }
     }
@@ -83,6 +73,10 @@ public final class DeskExtendViewModel: ObservableObject {
             ScreenCaptureEngine.requestScreenRecordingPermission()
         }
         checkPermissions()
+        guard hasScreenRecordingPermission else {
+            alertMessage = ScreenCaptureError.permissionRequired.localizedDescription
+            return
+        }
 
         // 2. Start Virtual Display
         let config = DisplayConfig(
@@ -162,16 +156,5 @@ public final class DeskExtendViewModel: ObservableObject {
         let pasteboard = NSPasteboard.general
         pasteboard.clearContents()
         pasteboard.setString(url, forType: .string)
-    }
-
-    public func relaunchApp() {
-        let appURL = Bundle.main.bundleURL
-        let config = NSWorkspace.OpenConfiguration()
-        config.createsNewApplicationInstance = true
-        NSWorkspace.shared.openApplication(at: appURL, configuration: config) { _, _ in
-            DispatchQueue.main.async {
-                NSApp.terminate(nil)
-            }
-        }
     }
 }

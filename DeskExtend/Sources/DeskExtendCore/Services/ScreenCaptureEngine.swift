@@ -5,7 +5,6 @@ import CoreMedia
 import ImageIO
 import UniformTypeIdentifiers
 import AppKit
-import VideoToolbox
 
 public enum ScreenCaptureError: LocalizedError {
     case permissionRequired
@@ -60,24 +59,18 @@ public final class ScreenCaptureEngine: NSObject, SCStreamOutput, SCStreamDelega
         stopCapture()
 
         guard (1...120).contains(fps) else { throw ScreenCaptureError.invalidFrameRate }
+        guard Self.hasScreenRecordingPermission() else { throw ScreenCaptureError.permissionRequired }
 
         self.quality = quality
         self.lastPreviewTime = 0
 
         var targetDisplay: SCDisplay?
         for attempt in 1...6 {
-            do {
-                let content = try await SCShareableContent.excludingDesktopWindows(false, onScreenWindowsOnly: true)
-                if let matched = content.displays.first(where: { $0.displayID == displayID }) {
-                    targetDisplay = matched
-                    print("[ScreenCaptureEngine] Matched virtual display ID: \(displayID) on attempt \(attempt)")
-                    break
-                }
-            } catch {
-                if !Self.hasScreenRecordingPermission() {
-                    throw ScreenCaptureError.permissionRequired
-                }
-                print("[ScreenCaptureEngine] Attempt \(attempt) SCShareableContent error: \(error)")
+            let content = try await SCShareableContent.excludingDesktopWindows(false, onScreenWindowsOnly: true)
+            if let matched = content.displays.first(where: { $0.displayID == displayID }) {
+                targetDisplay = matched
+                print("[ScreenCaptureEngine] Matched virtual display ID: \(displayID) on attempt \(attempt)")
+                break
             }
             if attempt < 6 { try await Task.sleep(nanoseconds: 200_000_000) }
         }
@@ -92,7 +85,6 @@ public final class ScreenCaptureEngine: NSObject, SCStreamOutput, SCStreamDelega
         config.height = scDisplay.height
         config.minimumFrameInterval = CMTime(value: 1, timescale: Int32(fps))
         config.pixelFormat = kCVPixelFormatType_32BGRA
-        config.colorSpaceName = CGColorSpace.sRGB
         config.showsCursor = true
         config.queueDepth = 3
 
@@ -143,22 +135,36 @@ public final class ScreenCaptureEngine: NSObject, SCStreamOutput, SCStreamDelega
 
         guard let imageBuffer = CMSampleBufferGetImageBuffer(sampleBuffer) else { return }
 
-        // Fast zero-copy hardware CGImage extraction via VideoToolbox
-        var extractedCGImage: CGImage?
-        let vtStatus = VTCreateCGImageFromCVPixelBuffer(imageBuffer, options: nil, imageOut: &extractedCGImage)
-        guard vtStatus == noErr, let cgImage = extractedCGImage else { return }
+        CVPixelBufferLockBaseAddress(imageBuffer, .readOnly)
+        defer { CVPixelBufferUnlockBaseAddress(imageBuffer, .readOnly) }
 
-        let width = cgImage.width
-        let height = cgImage.height
+        let width = CVPixelBufferGetWidth(imageBuffer)
+        let height = CVPixelBufferGetHeight(imageBuffer)
+        let bytesPerRow = CVPixelBufferGetBytesPerRow(imageBuffer)
+        guard let baseAddress = CVPixelBufferGetBaseAddress(imageBuffer) else { return }
 
-        // High-fidelity hardware JPEG compression
+        let colorSpace = CGColorSpaceCreateDeviceRGB()
+        let bitmapInfo = CGBitmapInfo(rawValue: CGBitmapInfo.byteOrder32Little.rawValue | CGImageAlphaInfo.premultipliedFirst.rawValue)
+
+        guard let context = CGContext(
+            data: baseAddress,
+            width: width,
+            height: height,
+            bitsPerComponent: 8,
+            bytesPerRow: bytesPerRow,
+            space: colorSpace,
+            bitmapInfo: bitmapInfo.rawValue
+        ), let cgImage = context.makeImage() else {
+            return
+        }
+
+        // Compress to JPEG for high-speed network transmission
         let jpegData = NSMutableData()
         guard let destination = CGImageDestinationCreateWithData(jpegData as CFMutableData, UTType.jpeg.identifier as CFString, 1, nil) else {
             return
         }
         let props: [CFString: Any] = [
-            kCGImageDestinationLossyCompressionQuality: quality,
-            kCGImageDestinationOptimizeColorForSharing: kCFBooleanTrue as Any
+            kCGImageDestinationLossyCompressionQuality: quality
         ]
         CGImageDestinationAddImage(destination, cgImage, props as CFDictionary)
         guard CGImageDestinationFinalize(destination) else { return }

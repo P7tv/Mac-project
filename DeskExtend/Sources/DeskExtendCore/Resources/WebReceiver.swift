@@ -24,9 +24,6 @@ public struct WebReceiver {
           object-fit: contain;
           display: block;
           image-rendering: -webkit-optimize-contrast;
-          image-rendering: crisp-edges;
-          transform: translateZ(0);
-          backface-visibility: hidden;
         }
         #hud {
           position: fixed;
@@ -184,10 +181,7 @@ public struct WebReceiver {
 
             const blob = new Blob([data], { type: 'image/jpeg' });
             try {
-              const imageBitmap = await createImageBitmap(blob, {
-                premultiplyAlpha: 'none',
-                colorSpaceConversion: 'none'
-              });
+              const imageBitmap = await createImageBitmap(blob);
               if (ws.readyState !== WebSocket.OPEN) {
                 imageBitmap.close();
                 return;
@@ -204,11 +198,7 @@ public struct WebReceiver {
               const now = performance.now();
               if (now - lastTime >= 1000) {
                 const fps = Math.round((frameCount * 1000) / (now - lastTime));
-                if (fps <= 2) {
-                  fpsCounter.innerText = "Idle (60 Hz Max)";
-                } else {
-                  fpsCounter.innerText = `${fps} FPS`;
-                }
+                fpsCounter.innerText = `${fps} FPS`;
                 frameCount = 0;
                 lastTime = now;
               }
