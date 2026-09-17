@@ -60,18 +60,24 @@ public final class ScreenCaptureEngine: NSObject, SCStreamOutput, SCStreamDelega
         stopCapture()
 
         guard (1...120).contains(fps) else { throw ScreenCaptureError.invalidFrameRate }
-        guard Self.hasScreenRecordingPermission() else { throw ScreenCaptureError.permissionRequired }
 
         self.quality = quality
         self.lastPreviewTime = 0
 
         var targetDisplay: SCDisplay?
         for attempt in 1...6 {
-            let content = try await SCShareableContent.excludingDesktopWindows(false, onScreenWindowsOnly: true)
-            if let matched = content.displays.first(where: { $0.displayID == displayID }) {
-                targetDisplay = matched
-                print("[ScreenCaptureEngine] Matched virtual display ID: \(displayID) on attempt \(attempt)")
-                break
+            do {
+                let content = try await SCShareableContent.excludingDesktopWindows(false, onScreenWindowsOnly: true)
+                if let matched = content.displays.first(where: { $0.displayID == displayID }) {
+                    targetDisplay = matched
+                    print("[ScreenCaptureEngine] Matched virtual display ID: \(displayID) on attempt \(attempt)")
+                    break
+                }
+            } catch {
+                if !Self.hasScreenRecordingPermission() {
+                    throw ScreenCaptureError.permissionRequired
+                }
+                print("[ScreenCaptureEngine] Attempt \(attempt) SCShareableContent error: \(error)")
             }
             if attempt < 6 { try await Task.sleep(nanoseconds: 200_000_000) }
         }
