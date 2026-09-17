@@ -27,6 +27,42 @@ public enum AudioSourceMode: String, CaseIterable, Identifiable, Sendable {
     }
 }
 
+public enum LatencyProfile: String, CaseIterable, Identifiable, Sendable {
+    case ultraLow = "Ultra-Low"
+    case balanced = "Balanced"
+    case smooth = "Smooth"
+
+    public var id: String { rawValue }
+
+    public var icon: String {
+        switch self {
+        case .ultraLow: return "bolt.fill"
+        case .balanced: return "scalemass.fill"
+        case .smooth: return "shield.checkered"
+        }
+    }
+
+    public var targetBufferMs: Double {
+        switch self {
+        case .ultraLow: return 25.0
+        case .balanced: return 60.0
+        case .smooth: return 120.0
+        }
+    }
+
+    public var localizedDescription: String {
+        switch self {
+        case .ultraLow: return "ดีเลย์ต่ำสุด (~25ms) เหมาะสำหรับเกมและคลิป"
+        case .balanced: return "สมดุล (~60ms) แนะนำสำหรับการใช้งานทั่วไป"
+        case .smooth: return "เสถียรสูงสุด (~120ms) ป้องกันเสียงสะดุดบน Wi-Fi"
+        }
+    }
+
+    public func targetFrames(sampleRate: Double = 48000) -> Int {
+        return Int((targetBufferMs / 1000.0) * sampleRate)
+    }
+}
+
 public struct AudioFormatConfig: Sendable, Equatable {
     public var sampleRate: Double
     public var channels: Int
