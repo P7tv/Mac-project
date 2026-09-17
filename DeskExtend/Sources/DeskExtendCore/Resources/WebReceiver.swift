@@ -204,7 +204,11 @@ public struct WebReceiver {
               const now = performance.now();
               if (now - lastTime >= 1000) {
                 const fps = Math.round((frameCount * 1000) / (now - lastTime));
-                fpsCounter.innerText = `${fps} FPS`;
+                if (fps <= 2) {
+                  fpsCounter.innerText = "Idle (60 Hz Max)";
+                } else {
+                  fpsCounter.innerText = `${fps} FPS`;
+                }
                 frameCount = 0;
                 lastTime = now;
               }
