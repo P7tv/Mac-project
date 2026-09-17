@@ -148,7 +148,11 @@ public final class ConversionViewModel: ObservableObject {
                         )
                         outputURL = extracted.first ?? item.inputURL
                     } else {
-                        outputURL = item.inputURL
+                        // Compress existing PDF
+                        outputURL = try PDFCompressor.compressPDF(
+                            inputURL: item.inputURL,
+                            settings: currentSettings
+                        )
                     }
                 } else {
                     // Images, Camera RAW (CR2/NEF/ARW/DNG), SVG
@@ -188,7 +192,7 @@ public final class ConversionViewModel: ObservableObject {
                 counter += 1
             }
 
-            let resultURL = try PDFMerger.mergeToPDF(imageURLs: imageURLs, outputURL: outputPDF)
+            let resultURL = try PDFMerger.mergeToPDF(imageURLs: imageURLs, outputURL: outputPDF, quality: settings.quality)
             let pdfSize = (try? FileManager.default.attributesOfItem(atPath: resultURL.path)[.size] as? Int64) ?? 0
 
             for item in items {

@@ -146,4 +146,19 @@ final class EngineTests: XCTestCase {
             XCTAssertEqual(pageURL.pathExtension.lowercased(), "png")
         }
     }
+
+    func testCompressPDF() throws {
+        let img1 = createTestImage(width: 400, height: 400)
+        let img2 = createTestImage(width: 400, height: 400)
+        let originalPDF = tempDirectory.appendingPathComponent("to_compress.pdf")
+        _ = try PDFMerger.mergeToPDF(imageURLs: [img1, img2], outputURL: originalPDF)
+
+        let settings = ConversionSettings(targetFormat: .pdf, quality: 0.6)
+        let compressedURL = try PDFCompressor.compressPDF(inputURL: originalPDF, settings: settings)
+
+        XCTAssertTrue(FileManager.default.fileExists(atPath: compressedURL.path))
+        XCTAssertEqual(compressedURL.pathExtension.lowercased(), "pdf")
+        let size = (try? FileManager.default.attributesOfItem(atPath: compressedURL.path)[.size] as? Int64) ?? 0
+        XCTAssertGreaterThan(size, 0)
+    }
 }

@@ -1,6 +1,8 @@
 import Foundation
 import AppKit
 import PDFKit
+import CoreGraphics
+import UniformTypeIdentifiers
 
 public enum PDFMergerError: LocalizedError {
     case noValidImages
@@ -17,13 +19,26 @@ public enum PDFMergerError: LocalizedError {
 }
 
 public struct PDFMerger: Sendable {
-    public static func mergeToPDF(imageURLs: [URL], outputURL: URL) throws -> URL {
+    public static func mergeToPDF(
+        imageURLs: [URL],
+        outputURL: URL,
+        quality: Double = 0.8
+    ) throws -> URL {
         let pdfDocument = PDFDocument()
         var addedCount = 0
 
         for url in imageURLs {
             guard let nsImage = NSImage(contentsOf: url) else { continue }
-            if let pdfPage = PDFPage(image: nsImage) {
+            
+            // Re-compress image to JPEG before embedding into PDF to prevent massive PDF file sizes
+            if let tiffData = nsImage.tiffRepresentation,
+               let bitmap = NSBitmapImageRep(data: tiffData),
+               let jpegData = bitmap.representation(using: .jpeg, properties: [.compressionFactor: NSNumber(value: quality)]),
+               let compressedImage = NSImage(data: jpegData),
+               let pdfPage = PDFPage(image: compressedImage) {
+                pdfDocument.insert(pdfPage, at: pdfDocument.pageCount)
+                addedCount += 1
+            } else if let pdfPage = PDFPage(image: nsImage) {
                 pdfDocument.insert(pdfPage, at: pdfDocument.pageCount)
                 addedCount += 1
             }
