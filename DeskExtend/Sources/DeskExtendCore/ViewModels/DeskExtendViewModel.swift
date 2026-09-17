@@ -15,6 +15,7 @@ public final class DeskExtendViewModel: ObservableObject {
     @Published public var activeDisplayID: CGDirectDisplayID? = nil
     @Published public var alertMessage: String? = nil
     @Published public var port: UInt16 = 8080
+    @Published public var hasScreenRecordingPermission: Bool = false
 
     private let virtualDisplayManager = VirtualDisplayManager()
     private let captureEngine = ScreenCaptureEngine()
@@ -22,10 +23,22 @@ public final class DeskExtendViewModel: ObservableObject {
 
     public init() {
         refreshNetworkAddresses()
+        checkPermissions()
+    }
+
+    public func checkPermissions() {
+        self.hasScreenRecordingPermission = ScreenCaptureEngine.hasScreenRecordingPermission()
+    }
+
+    public func requestScreenRecordingPermission() {
+        ScreenCaptureEngine.requestScreenRecordingPermission()
+        ScreenCaptureEngine.openScreenRecordingSettings()
+        checkPermissions()
     }
 
     public func refreshNetworkAddresses() {
         self.networkAddresses = NetworkInterfaceHelper.getLocalIPAddresses(port: port)
+        checkPermissions()
     }
 
     public func toggleStreaming() {

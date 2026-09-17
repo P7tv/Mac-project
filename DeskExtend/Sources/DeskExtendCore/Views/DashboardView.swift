@@ -66,6 +66,66 @@ public struct DashboardView: View {
             // Main Content Area
             ScrollView {
                 VStack(spacing: 16) {
+                    // Screen Recording Permission Warning Banner
+                    if !viewModel.hasScreenRecordingPermission {
+                        VStack(alignment: .leading, spacing: 10) {
+                            HStack(alignment: .top, spacing: 10) {
+                                Image(systemName: "lock.shield.fill")
+                                    .font(.system(size: 22))
+                                    .foregroundColor(.orange)
+
+                                VStack(alignment: .leading, spacing: 3) {
+                                    Text("ต้องการสิทธิ์การบันทึกหน้าจอ (Screen Recording)")
+                                        .font(.system(size: 13, weight: .bold))
+                                        .foregroundColor(.primary)
+
+                                    Text("เพื่อให้ macOS ส่งภาพของจอที่ 2 ไปยังเบราว์เซอร์ได้ กรุณากดปุ่มด้านล่างเพื่อเปิด System Settings และเปิดสวิตช์ DeskExtend")
+                                        .font(.system(size: 11))
+                                        .foregroundColor(.secondary)
+                                }
+                            }
+
+                            HStack(spacing: 12) {
+                                Button {
+                                    viewModel.requestScreenRecordingPermission()
+                                } label: {
+                                    HStack(spacing: 6) {
+                                        Image(systemName: "gearshape.fill")
+                                        Text("เปิด System Settings เพื่ออนุญาต")
+                                            .font(.system(size: 12, weight: .semibold))
+                                    }
+                                    .padding(.horizontal, 12)
+                                    .padding(.vertical, 6)
+                                    .background(Color.orange.opacity(0.18))
+                                    .cornerRadius(8)
+                                    .foregroundColor(.orange)
+                                }
+                                .buttonStyle(.plain)
+
+                                Button {
+                                    viewModel.checkPermissions()
+                                } label: {
+                                    HStack(spacing: 4) {
+                                        Image(systemName: "arrow.clockwise")
+                                        Text("ตรวจสอบสิทธิ์อีกครั้ง")
+                                            .font(.system(size: 11))
+                                    }
+                                    .foregroundColor(.secondary)
+                                }
+                                .buttonStyle(.plain)
+                            }
+                        }
+                        .padding(14)
+                        .background(
+                            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                .fill(Color.orange.opacity(0.08))
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                        .stroke(Color.orange.opacity(0.25), lineWidth: 1)
+                                )
+                        )
+                    }
+
                     // Start / Stop Main Action Button
                     Button {
                         viewModel.toggleStreaming()

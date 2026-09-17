@@ -27,6 +27,12 @@ public final class ScreenCaptureEngine: NSObject, SCStreamOutput, SCStreamDelega
         CGRequestScreenCaptureAccess()
     }
 
+    public static func openScreenRecordingSettings() {
+        if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture") {
+            NSWorkspace.shared.open(url)
+        }
+    }
+
     public func startCapture(
         displayID: CGDirectDisplayID,
         fps: Int = 60,
