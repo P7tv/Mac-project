@@ -2,6 +2,7 @@ import Foundation
 import CoreGraphics
 import ImageIO
 import UniformTypeIdentifiers
+import AppKit
 
 public enum ImageConverterError: LocalizedError {
     case invalidSource(URL)
@@ -40,7 +41,18 @@ public struct ImageConverter: Sendable {
             return try convertToWebP(inputURL: inputURL, settings: settings, targetOutputURL: targetOutputURL)
         }
 
-        // 2. Native ImageIO Conversion (JPEG, PNG, HEIC, TIFF, ICNS)
+        // 2. If input is SVG vector, render via AppKit vector pipeline
+        if inputURL.pathExtension.lowercased() == "svg",
+           let nsImage = NSImage(contentsOf: inputURL) {
+            let baseSize = nsImage.size
+            let scale: CGFloat = 2.0
+            let targetSize = CGSize(width: max(512, baseSize.width * scale), height: max(512, baseSize.height * scale))
+            if let cgImage = renderSVGToCGImage(nsImage: nsImage, size: targetSize) {
+                return try saveCGImage(cgImage: cgImage, inputURL: inputURL, sourceProperties: nil, settings: settings, targetOutputURL: targetOutputURL)
+            }
+        }
+
+        // 3. Native ImageIO Conversion (JPEG, PNG, HEIC, TIFF, ICNS, ICO, Camera RAW: CR2/CR3/NEF/ARW/DNG/RAF/ORF)
         guard let imageSource = CGImageSourceCreateWithURL(inputURL as CFURL, nil) else {
             throw ImageConverterError.invalidSource(inputURL)
         }
@@ -60,7 +72,7 @@ public struct ImageConverter: Sendable {
             maxPixelDimension = min(max(originalWidth, originalHeight), maxDim)
         }
 
-        // Extract CGImage (with downsampling if requested)
+        // Extract CGImage (with hardware downsampling if requested)
         let cgImage: CGImage
         if let maxDim = maxPixelDimension {
             let thumbnailOptions: [CFString: Any] = [
@@ -80,7 +92,16 @@ public struct ImageConverter: Sendable {
             cgImage = full
         }
 
-        // Output destination
+        return try saveCGImage(cgImage: cgImage, inputURL: inputURL, sourceProperties: sourceProperties, settings: settings, targetOutputURL: targetOutputURL)
+    }
+
+    private static func saveCGImage(
+        cgImage: CGImage,
+        inputURL: URL,
+        sourceProperties: [CFString: Any]?,
+        settings: ConversionSettings,
+        targetOutputURL: URL?
+    ) throws -> URL {
         let finalOutputURL: URL
         if let target = targetOutputURL {
             finalOutputURL = target
@@ -106,11 +127,11 @@ public struct ImageConverter: Sendable {
             destinationProperties[kCGImageDestinationLossyCompressionQuality] = settings.quality
         }
 
-        if !settings.stripMetadata {
-            if let exif = sourceProperties[kCGImagePropertyExifDictionary] {
+        if !settings.stripMetadata, let props = sourceProperties {
+            if let exif = props[kCGImagePropertyExifDictionary] {
                 destinationProperties[kCGImagePropertyExifDictionary] = exif
             }
-            if let tiff = sourceProperties[kCGImagePropertyTIFFDictionary] {
+            if let tiff = props[kCGImagePropertyTIFFDictionary] {
                 destinationProperties[kCGImagePropertyTIFFDictionary] = tiff
             }
         }
@@ -122,6 +143,31 @@ public struct ImageConverter: Sendable {
         }
 
         return finalOutputURL
+    }
+
+    private static func renderSVGToCGImage(nsImage: NSImage, size: CGSize) -> CGImage? {
+        let colorSpace = CGColorSpaceCreateDeviceRGB()
+        let width = Int(size.width)
+        let height = Int(size.height)
+        guard let context = CGContext(
+            data: nil,
+            width: width,
+            height: height,
+            bitsPerComponent: 8,
+            bytesPerRow: width * 4,
+            space: colorSpace,
+            bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+        ) else {
+            return nil
+        }
+
+        NSGraphicsContext.saveGraphicsState()
+        let nsContext = NSGraphicsContext(cgContext: context, flipped: false)
+        NSGraphicsContext.current = nsContext
+        nsImage.draw(in: CGRect(origin: .zero, size: size))
+        NSGraphicsContext.restoreGraphicsState()
+
+        return context.makeImage()
     }
 
     private static func convertToWebP(
@@ -144,7 +190,7 @@ public struct ImageConverter: Sendable {
         try? FileManager.default.createDirectory(at: parentDir, withIntermediateDirectories: true)
         try? FileManager.default.removeItem(at: finalOutputURL)
 
-        // Step A: Prepare intermediate PNG with downsampling/resizing
+        // Step A: Prepare intermediate PNG
         var intermediateSettings = settings
         intermediateSettings.targetFormat = .png
         let tempPNGURL = parentDir.appendingPathComponent(".temp_\(UUID().uuidString).png")

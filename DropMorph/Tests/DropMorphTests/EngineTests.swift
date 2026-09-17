@@ -111,4 +111,39 @@ final class EngineTests: XCTestCase {
         let fileSize = (try? FileManager.default.attributesOfItem(atPath: resultURL.path)[.size] as? Int64) ?? 0
         XCTAssertGreaterThan(fileSize, 0)
     }
+
+    func testConvertSVGToPNG() throws {
+        let svgContent = """
+        <svg xmlns="http://www.w3.org/2000/svg" width="200" height="200" viewBox="0 0 200 200">
+          <rect width="200" height="200" fill="#2563eb"/>
+          <circle cx="100" cy="100" r="60" fill="#facc15"/>
+        </svg>
+        """
+        let svgURL = tempDirectory.appendingPathComponent("test_vector.svg")
+        try svgContent.write(to: svgURL, atomically: true, encoding: .utf8)
+
+        let settings = ConversionSettings(targetFormat: .png)
+        let outputURL = try ImageConverter.convert(inputURL: svgURL, settings: settings)
+
+        XCTAssertTrue(FileManager.default.fileExists(atPath: outputURL.path))
+        XCTAssertEqual(outputURL.pathExtension.lowercased(), "png")
+        let size = (try? FileManager.default.attributesOfItem(atPath: outputURL.path)[.size] as? Int64) ?? 0
+        XCTAssertGreaterThan(size, 0)
+    }
+
+    func testExtractPDFPagesToImages() throws {
+        // First create a 2-page PDF
+        let img1 = createTestImage(width: 200, height: 200)
+        let img2 = createTestImage(width: 200, height: 200)
+        let pdfURL = tempDirectory.appendingPathComponent("document.pdf")
+        _ = try PDFMerger.mergeToPDF(imageURLs: [img1, img2], outputURL: pdfURL)
+
+        // Now extract pages
+        let extracted = try PDFExtractor.extractPages(pdfURL: pdfURL, format: .png, outputDirectory: tempDirectory)
+        XCTAssertEqual(extracted.count, 2)
+        for pageURL in extracted {
+            XCTAssertTrue(FileManager.default.fileExists(atPath: pageURL.path))
+            XCTAssertEqual(pageURL.pathExtension.lowercased(), "png")
+        }
+    }
 }

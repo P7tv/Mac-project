@@ -7,13 +7,13 @@
 ## ✨ ฟีเจอร์หลัก (Key Features)
 
 - 🚀 **Drag & Drop ฉับไว:** ลากไฟล์ภาพเดี่ยว หลายไฟล์ หรือทั้งโฟลเดอร์มาวางเพื่อแปลงอัตโนมัติ
-- 🔄 **รองรับหลากหลายฟอร์แมต:**
-  - **WebP:** แปลงภาพสำหรับเว็บไซต์ ขนาดเล็ก คมชัด
-  - **HEIC:** ฟอร์แมตประสิทธิภาพสูงของ Apple
-  - **JPEG:** ปรับระดับ Quality ได้ตั้งแต่ 10% ถึง 100%
-  - **PNG:** บันทึกแบบ Lossless รักษาความโปร่งใส
-  - **PDF:** รวมหลายภาพเข้าด้วยกันเป็นไฟล์ PDF หน้าเดียวหรือหลายหน้า
-  - **ICNS:** แปลงรูปเป็น Mac App Icon สำหรับนักพัฒนา
+- 🔄 **รองรับตระกูลไฟล์ครอบคลุม (All-in-One Media & Documents):**
+  - **Standard Images:** WebP, HEIC, JPEG, PNG, TIFF, BMP, AVIF
+  - **Camera RAW (กล้องโปร):** Canon (.CR2, .CR3), Nikon (.NEF), Sony (.ARW), Adobe (.DNG), Fujifilm (.RAF), Olympus (.ORF)
+  - **Vector Graphics:** SVG (แปลงเป็นภาพ Bitmap คมชัดตามขนาดที่ต้องการ)
+  - **Video to GIF & Audio:** แปลงวิดีโอ (MP4, MOV, M4V) เป็นภาพเคลื่อนไหว GIF หรือสกัดเฉพาะเสียงเป็น M4A Audio
+  - **PDF Toolkit:** รวมภาพเป็น PDF หรือแยกทุกหน้าใน PDF ออกมาเป็นรูปภาพ PNG/JPEG
+  - **App Icons:** แปลงเป็น Mac App Icon (.ICNS) หรือ Windows Icon (.ICO)
 - 📏 **ปรับสเกล & ย่อขนาด:** Presets 100%, 75%, 50%, 25%, Max 1920px, Max 1280px
 - 🛡️ **Strip Metadata:** ตัวเลือกลบข้อมูล EXIF / พิกัด GPS ก่อนแชร์
 - 📌 **Always on Top:** ปักหมุดหน้าต่างให้ลอยอยู่บนสุดของหน้าจอได้ ไม่ต้องสลับหน้าต่างไปมา

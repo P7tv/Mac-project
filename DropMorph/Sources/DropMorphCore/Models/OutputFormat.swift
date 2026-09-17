@@ -7,7 +7,10 @@ public enum OutputFormat: String, CaseIterable, Identifiable, Sendable {
     case png
     case heic
     case pdf
+    case gif
+    case m4a
     case icns
+    case ico
     case tiff
 
     public var id: String { rawValue }
@@ -19,7 +22,10 @@ public enum OutputFormat: String, CaseIterable, Identifiable, Sendable {
         case .png: return "PNG"
         case .heic: return "HEIC"
         case .pdf: return "PDF"
-        case .icns: return "ICNS (Mac Icon)"
+        case .gif: return "GIF"
+        case .m4a: return "M4A (Audio)"
+        case .icns: return "ICNS (Mac)"
+        case .ico: return "ICO (Win)"
         case .tiff: return "TIFF"
         }
     }
@@ -31,7 +37,10 @@ public enum OutputFormat: String, CaseIterable, Identifiable, Sendable {
         case .png: return "png"
         case .heic: return "heic"
         case .pdf: return "pdf"
+        case .gif: return "gif"
+        case .m4a: return "m4a"
         case .icns: return "icns"
+        case .ico: return "ico"
         case .tiff: return "tiff"
         }
     }
@@ -43,7 +52,10 @@ public enum OutputFormat: String, CaseIterable, Identifiable, Sendable {
         case .png: return .png
         case .heic: return .heic
         case .pdf: return .pdf
+        case .gif: return .gif
+        case .m4a: return .mpeg4Audio
         case .icns: return .icns
+        case .ico: return .ico
         case .tiff: return .tiff
         }
     }
@@ -55,12 +67,18 @@ public enum OutputFormat: String, CaseIterable, Identifiable, Sendable {
         case .png: return "photo"
         case .heic: return "livephoto"
         case .pdf: return "doc.text.fill"
+        case .gif: return "play.square.stack.fill"
+        case .m4a: return "waveform"
         case .icns: return "app.badge.fill"
+        case .ico: return "window.vertical.closed"
         case .tiff: return "photo.stack"
         }
     }
 
     public var isImage: Bool {
-        self != .pdf
+        switch self {
+        case .pdf, .m4a: return false
+        default: return true
+        }
     }
 }

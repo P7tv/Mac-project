@@ -67,25 +67,31 @@ public struct MenuBarPopoverView: View {
                     }
                 }
 
-                HStack(spacing: 5) {
-                    ForEach([OutputFormat.webp, .jpeg, .png, .heic, .pdf]) { format in
-                        let isSelected = viewModel.settings.targetFormat == format
-                        Button {
-                            withAnimation(.easeInOut(duration: 0.15)) {
-                                viewModel.settings.targetFormat = format
-                            }
-                        } label: {
-                            Text(format.displayName)
-                                .font(.system(size: 11, weight: isSelected ? .bold : .medium))
-                                .frame(maxWidth: .infinity)
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 5) {
+                        ForEach(OutputFormat.allCases) { format in
+                            let isSelected = viewModel.settings.targetFormat == format
+                            Button {
+                                withAnimation(.easeInOut(duration: 0.15)) {
+                                    viewModel.settings.targetFormat = format
+                                }
+                            } label: {
+                                HStack(spacing: 4) {
+                                    Image(systemName: format.systemImage)
+                                        .font(.system(size: 9))
+                                    Text(format.displayName)
+                                        .font(.system(size: 11, weight: isSelected ? .bold : .medium))
+                                }
+                                .padding(.horizontal, 8)
                                 .padding(.vertical, 5)
                                 .background(
                                     RoundedRectangle(cornerRadius: 7, style: .continuous)
                                         .fill(isSelected ? Color.blue : Color.primary.opacity(0.06))
                                 )
                                 .foregroundColor(isSelected ? .white : .primary)
+                            }
+                            .buttonStyle(.plain)
                         }
-                        .buttonStyle(.plain)
                     }
                 }
             }

@@ -38,14 +38,22 @@ public final class ConversionViewModel: ObservableObject {
     public func addFiles(urls: [URL]) {
         var validURLs: [URL] = []
         let supportedExtensions: Set<String> = [
-            "png", "jpg", "jpeg", "webp", "heic", "tiff", "tif", "gif", "bmp"
+            // Standard Images
+            "png", "jpg", "jpeg", "webp", "heic", "tiff", "tif", "gif", "bmp", "avif",
+            // Vector
+            "svg",
+            // Camera RAW
+            "cr2", "cr3", "nef", "arw", "dng", "raf", "orf", "rw2", "pef",
+            // Video
+            "mp4", "mov", "m4v",
+            // Documents
+            "pdf"
         ]
 
         for url in urls {
             var isDir: ObjCBool = false
             if FileManager.default.fileExists(atPath: url.path, isDirectory: &isDir) {
                 if isDir.boolValue {
-                    // Enumerate directory
                     if let enumerator = FileManager.default.enumerator(
                         at: url,
                         includingPropertiesForKeys: [.isRegularFileKey],
@@ -64,14 +72,13 @@ public final class ConversionViewModel: ObservableObject {
         }
 
         guard !validURLs.isEmpty else {
-            alertMessage = "No supported image files found in drop."
+            alertMessage = "No supported media or document files found."
             return
         }
 
         let newItems = validURLs.map { ConversionItem(inputURL: $0) }
         queue.append(contentsOf: newItems)
 
-        // Trigger conversion automatically
         Task {
             await processQueue()
         }
@@ -89,28 +96,71 @@ public final class ConversionViewModel: ObservableObject {
 
         guard !pendingItems.isEmpty else { return }
 
-        // If format is PDF and there are multiple items, check if user requested single PDF or per-image PDF
-        if settings.targetFormat == .pdf {
-            await processPDFMerge(items: pendingItems)
+        // If target format is PDF and input contains images, merge to PDF
+        let imageItems = pendingItems.filter {
+            let ext = $0.inputURL.pathExtension.lowercased()
+            return ext != "mp4" && ext != "mov" && ext != "m4v" && ext != "pdf"
+        }
+
+        if settings.targetFormat == .pdf && imageItems.count == pendingItems.count && imageItems.count > 1 {
+            await processPDFMerge(items: imageItems)
             return
         }
 
-        // Process images concurrently with up to 4 parallel workers
         let currentSettings = self.settings
-        await withTaskGroup(of: Void.self) { group in
-            for item in pendingItems {
-                group.addTask { @MainActor in
-                    item.status = .processing(0.5)
-                    do {
-                        let outputURL = try ImageConverter.convert(inputURL: item.inputURL, settings: currentSettings)
-                        let convertedSize = (try? FileManager.default.attributesOfItem(atPath: outputURL.path)[.size] as? Int64) ?? 0
-                        item.status = .completed(outputURL: outputURL)
-                        item.convertedFileSize = convertedSize
-                        item.outputURL = outputURL
-                    } catch {
-                        item.status = .failed(error.localizedDescription)
+
+        for item in pendingItems {
+            item.status = .processing(0.5)
+            let ext = item.inputURL.pathExtension.lowercased()
+
+            do {
+                let outputURL: URL
+
+                if ext == "mp4" || ext == "mov" || ext == "m4v" {
+                    // Video conversion
+                    if currentSettings.targetFormat == .gif {
+                        let target = ImageConverter.destinationURL(for: item.inputURL, format: .gif, customFolder: currentSettings.customOutputFolder)
+                        outputURL = try await VideoConverter.convertToGIF(videoURL: item.inputURL, outputURL: target)
+                    } else if currentSettings.targetFormat == .m4a {
+                        let target = ImageConverter.destinationURL(for: item.inputURL, format: .m4a, customFolder: currentSettings.customOutputFolder)
+                        outputURL = try await VideoConverter.extractAudio(videoURL: item.inputURL, outputURL: target)
+                    } else {
+                        // Extract poster frame and convert to target image format
+                        guard let poster = await VideoConverter.extractPosterFrame(videoURL: item.inputURL) else {
+                            throw VideoConverterError.noFramesExtracted
+                        }
+                        let target = ImageConverter.destinationURL(for: item.inputURL, format: currentSettings.targetFormat, customFolder: currentSettings.customOutputFolder)
+                        // Save poster
+                        let tempPNG = FileManager.default.temporaryDirectory.appendingPathComponent("poster_\(UUID().uuidString).png")
+                        let dest = CGImageDestinationCreateWithURL(tempPNG as CFURL, "public.png" as CFString, 1, nil)!
+                        CGImageDestinationAddImage(dest, poster, nil)
+                        CGImageDestinationFinalize(dest)
+                        outputURL = try ImageConverter.convert(inputURL: tempPNG, settings: currentSettings, targetOutputURL: target)
+                        try? FileManager.default.removeItem(at: tempPNG)
                     }
+                } else if ext == "pdf" {
+                    // PDF extraction to images
+                    if currentSettings.targetFormat != .pdf {
+                        let extracted = try PDFExtractor.extractPages(
+                            pdfURL: item.inputURL,
+                            format: currentSettings.targetFormat,
+                            outputDirectory: currentSettings.customOutputFolder
+                        )
+                        outputURL = extracted.first ?? item.inputURL
+                    } else {
+                        outputURL = item.inputURL
+                    }
+                } else {
+                    // Images, Camera RAW (CR2/NEF/ARW/DNG), SVG
+                    outputURL = try ImageConverter.convert(inputURL: item.inputURL, settings: currentSettings)
                 }
+
+                let convertedSize = (try? FileManager.default.attributesOfItem(atPath: outputURL.path)[.size] as? Int64) ?? 0
+                item.status = .completed(outputURL: outputURL)
+                item.convertedFileSize = convertedSize
+                item.outputURL = outputURL
+            } catch {
+                item.status = .failed(error.localizedDescription)
             }
         }
     }
@@ -173,7 +223,6 @@ public final class ConversionViewModel: ObservableObject {
 
     public func applyWindowLevel() {
         for window in NSApp.windows {
-            // Keep auxiliary and main windows at floating level if pinned
             if window.canBecomeKey {
                 window.level = isPinnedOnTop ? .floating : .normal
             }
