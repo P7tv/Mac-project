@@ -21,11 +21,13 @@ struct DropMorphApp: App {
 
         MenuBarExtra("DropMorph", systemImage: "arrow.triangle.2.circlepath.circle.fill") {
             MenuBarPopoverView(viewModel: viewModel) {
+                NSApp.setActivationPolicy(.regular)
                 NSApp.activate(ignoringOtherApps: true)
-                if let window = NSApp.windows.first(where: { $0.canBecomeKey }) {
-                    window.makeKeyAndOrderFront(nil)
-                } else {
-                    openWindow(id: "main")
+                openWindow(id: "main")
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                    if let window = NSApp.windows.first(where: { $0.canBecomeKey }) {
+                        window.makeKeyAndOrderFront(nil)
+                    }
                 }
             }
         }

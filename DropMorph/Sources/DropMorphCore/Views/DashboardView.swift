@@ -122,8 +122,7 @@ public struct DashboardView: View {
                         }
 
                         // Compact secondary drop area
-                        DropZoneView(viewModel: viewModel)
-                            .frame(height: 70)
+                        DropZoneView(viewModel: viewModel, isCompact: true)
                             .padding(.horizontal, 18)
                             .padding(.bottom, 6)
                     }
