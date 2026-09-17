@@ -3,9 +3,11 @@ import AppKit
 
 public struct AudioTunnelMenuBarView: View {
     @ObservedObject public var viewModel: AudioTunnelViewModel
+    public var onOpenDashboard: (() -> Void)?
 
-    public init(viewModel: AudioTunnelViewModel) {
+    public init(viewModel: AudioTunnelViewModel, onOpenDashboard: (() -> Void)? = nil) {
         self.viewModel = viewModel
+        self.onOpenDashboard = onOpenDashboard
     }
 
     public var body: some View {
@@ -24,6 +26,23 @@ public struct AudioTunnelMenuBarView: View {
 
             // Master Start / Stop Button
             broadcastToggleButton
+
+            // Open Dashboard App Button
+            if let onOpenDashboard = onOpenDashboard {
+                Button(action: onOpenDashboard) {
+                    HStack(spacing: 6) {
+                        Image(systemName: "macwindow.on.rectangle")
+                        Text("Open AudioTunnel App")
+                    }
+                    .font(.system(size: 11.5, weight: .medium))
+                    .foregroundColor(.accentColor)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 7)
+                    .background(Color.accentColor.opacity(0.1))
+                    .cornerRadius(10)
+                }
+                .buttonStyle(.plain)
+            }
 
             // Footer
             footerView

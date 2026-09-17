@@ -2,21 +2,38 @@ import Foundation
 import SwiftUI
 import AppKit
 import Combine
+import AVFoundation
 
 @MainActor
 public final class AudioTunnelViewModel: ObservableObject, AudioCaptureEngineDelegate, AudioStreamServerDelegate {
     @Published public var isStreaming: Bool = false
     @Published public var sourceMode: AudioSourceMode = .systemAudio
+    @Published public var latencyProfile: LatencyProfile = .balanced
     @Published public var connectedListeners: Int = 0
     @Published public var currentVolumeRMS: Float = 0.0
     @Published public var webPlayerURL: String = ""
     @Published public var localIP: String = "127.0.0.1"
     @Published public var qrCodeImage: NSImage? = nil
     @Published public var toastMessage: String? = nil
+    @Published public var hasScreenCapturePermission: Bool = true
+    @Published public var hasMicrophonePermission: Bool = true
+    @Published public var uptimeSeconds: TimeInterval = 0
 
     public let port: UInt16 = 7070
     private let captureEngine: AudioCaptureEngine
     private let server: AudioStreamServer
+    private var uptimeTimer: AnyCancellable?
+
+    public var uptimeFormatted: String {
+        let hours = Int(uptimeSeconds) / 3600
+        let minutes = (Int(uptimeSeconds) % 3600) / 60
+        let seconds = Int(uptimeSeconds) % 60
+        if hours > 0 {
+            return String(format: "%02d:%02d:%02d", hours, minutes, seconds)
+        } else {
+            return String(format: "%02d:%02d", minutes, seconds)
+        }
+    }
 
     public init() {
         self.captureEngine = AudioCaptureEngine()
@@ -25,8 +42,38 @@ public final class AudioTunnelViewModel: ObservableObject, AudioCaptureEngineDel
         self.captureEngine.delegate = self
         self.server.delegate = self
 
+        checkPermissions()
         detectNetworkAddress()
         startServer()
+    }
+
+    public func checkPermissions() {
+        self.hasScreenCapturePermission = CGPreflightScreenCaptureAccess()
+        if #available(macOS 14.0, *) {
+            self.hasMicrophonePermission = AVAudioApplication.shared.recordPermission == .granted
+        } else {
+            self.hasMicrophonePermission = AVCaptureDevice.authorizationStatus(for: .audio) == .authorized
+        }
+    }
+
+    public func requestScreenCapturePermission() {
+        CGRequestScreenCaptureAccess()
+        if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture") {
+            NSWorkspace.shared.open(url)
+        }
+    }
+
+    public func requestMicrophonePermission() {
+        if #available(macOS 14.0, *) {
+            AVAudioApplication.requestRecordPermission { [weak self] granted in
+                Task { @MainActor in
+                    self?.hasMicrophonePermission = granted
+                }
+            }
+        }
+        if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone") {
+            NSWorkspace.shared.open(url)
+        }
     }
 
     public func detectNetworkAddress() {
@@ -78,10 +125,17 @@ public final class AudioTunnelViewModel: ObservableObject, AudioCaptureEngineDel
 
     public func startStreaming() {
         guard !isStreaming else { return }
+        checkPermissions()
         Task {
             do {
                 try await captureEngine.start(mode: sourceMode)
                 self.isStreaming = true
+                self.uptimeSeconds = 0
+                self.uptimeTimer = Timer.publish(every: 1, on: .main, in: .common)
+                    .autoconnect()
+                    .sink { [weak self] _ in
+                        self?.uptimeSeconds += 1
+                    }
                 self.showToast("⚡ Streaming \(sourceMode.rawValue)")
             } catch {
                 self.showToast("❌ Capture failed: \(error.localizedDescription)")
@@ -92,8 +146,11 @@ public final class AudioTunnelViewModel: ObservableObject, AudioCaptureEngineDel
     public func stopStreaming() {
         guard isStreaming else { return }
         captureEngine.stop()
+        uptimeTimer?.cancel()
+        uptimeTimer = nil
         self.isStreaming = false
         self.currentVolumeRMS = 0.0
+        self.uptimeSeconds = 0
         self.showToast("⏹️ Streaming stopped")
     }
 
@@ -108,10 +165,22 @@ public final class AudioTunnelViewModel: ObservableObject, AudioCaptureEngineDel
         }
     }
 
+    public func switchLatencyProfile(_ newProfile: LatencyProfile) {
+        guard latencyProfile != newProfile else { return }
+        self.latencyProfile = newProfile
+        showToast("Latency set to \(newProfile.rawValue)")
+    }
+
     public func copyPlayerURL() {
         NSPasteboard.general.clearContents()
         NSPasteboard.general.setString(webPlayerURL, forType: .string)
         showToast("📋 Web Player URL copied!")
+    }
+
+    public func openInBrowser() {
+        if let url = URL(string: webPlayerURL) {
+            NSWorkspace.shared.open(url)
+        }
     }
 
     public func showToast(_ message: String) {
