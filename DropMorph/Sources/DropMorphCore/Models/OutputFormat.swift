@@ -3,10 +3,11 @@ import UniformTypeIdentifiers
 
 public enum OutputFormat: String, CaseIterable, Identifiable, Sendable {
     case webp
-    case png
     case jpeg
+    case png
     case heic
     case pdf
+    case icns
     case tiff
 
     public var id: String { rawValue }
@@ -14,10 +15,11 @@ public enum OutputFormat: String, CaseIterable, Identifiable, Sendable {
     public var displayName: String {
         switch self {
         case .webp: return "WebP"
-        case .png: return "PNG"
         case .jpeg: return "JPEG"
+        case .png: return "PNG"
         case .heic: return "HEIC"
         case .pdf: return "PDF"
+        case .icns: return "ICNS (Mac Icon)"
         case .tiff: return "TIFF"
         }
     }
@@ -25,10 +27,11 @@ public enum OutputFormat: String, CaseIterable, Identifiable, Sendable {
     public var fileExtension: String {
         switch self {
         case .webp: return "webp"
-        case .png: return "png"
         case .jpeg: return "jpg"
+        case .png: return "png"
         case .heic: return "heic"
         case .pdf: return "pdf"
+        case .icns: return "icns"
         case .tiff: return "tiff"
         }
     }
@@ -36,10 +39,11 @@ public enum OutputFormat: String, CaseIterable, Identifiable, Sendable {
     public var utType: UTType {
         switch self {
         case .webp: return .webP
-        case .png: return .png
         case .jpeg: return .jpeg
+        case .png: return .png
         case .heic: return .heic
         case .pdf: return .pdf
+        case .icns: return .icns
         case .tiff: return .tiff
         }
     }
@@ -47,10 +51,11 @@ public enum OutputFormat: String, CaseIterable, Identifiable, Sendable {
     public var systemImage: String {
         switch self {
         case .webp: return "photo.badge.arrow.forward"
-        case .png: return "photo"
         case .jpeg: return "photo.fill"
+        case .png: return "photo"
         case .heic: return "livephoto"
         case .pdf: return "doc.text.fill"
+        case .icns: return "app.badge.fill"
         case .tiff: return "photo.stack"
         }
     }
