@@ -117,6 +117,22 @@ public struct DashboardView: View {
                                     .foregroundColor(.secondary)
                                 }
                                 .buttonStyle(.plain)
+
+                                Button {
+                                    viewModel.relaunchApp()
+                                } label: {
+                                    HStack(spacing: 4) {
+                                        Image(systemName: "arrow.clockwise.circle.fill")
+                                        Text("ปิดและเปิดแอปใหม่")
+                                            .font(.system(size: 11, weight: .semibold))
+                                    }
+                                    .padding(.horizontal, 8)
+                                    .padding(.vertical, 5)
+                                    .background(Color.blue.opacity(0.12))
+                                    .cornerRadius(6)
+                                    .foregroundColor(.blue)
+                                }
+                                .buttonStyle(.plain)
                             }
                         }
                         .padding(14)

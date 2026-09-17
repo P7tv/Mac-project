@@ -163,4 +163,15 @@ public final class DeskExtendViewModel: ObservableObject {
         pasteboard.clearContents()
         pasteboard.setString(url, forType: .string)
     }
+
+    public func relaunchApp() {
+        let appURL = Bundle.main.bundleURL
+        let config = NSWorkspace.OpenConfiguration()
+        config.createsNewApplicationInstance = true
+        NSWorkspace.shared.openApplication(at: appURL, configuration: config) { _, _ in
+            DispatchQueue.main.async {
+                NSApp.terminate(nil)
+            }
+        }
+    }
 }
