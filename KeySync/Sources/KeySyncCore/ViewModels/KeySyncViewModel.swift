@@ -11,6 +11,7 @@ public final class KeySyncViewModel: ObservableObject {
     @Published public var isControllingRemote: Bool = false
     @Published public var hasAccessibilityPermission: Bool = false
     @Published public var lastEventDescription: String = "Ready to Sync"
+    @Published public var eventLog: [String] = []
     @Published public var selectedEdge: ScreenEdge = .right {
         didSet {
             interceptor.updateEdge(selectedEdge)
@@ -103,6 +104,13 @@ public final class KeySyncViewModel: ObservableObject {
         interceptor.onLastEventDescription = { [weak self] desc in
             Task { @MainActor in
                 self?.lastEventDescription = desc
+                let formatter = DateFormatter()
+                formatter.dateFormat = "HH:mm:ss"
+                let timestamp = formatter.string(from: Date())
+                self?.eventLog.insert("[\(timestamp)] \(desc)", at: 0)
+                if (self?.eventLog.count ?? 0) > 20 {
+                    self?.eventLog.removeLast()
+                }
             }
         }
     }

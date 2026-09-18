@@ -150,6 +150,27 @@ public struct KeySyncMenuBarView: View {
                     }
                     .buttonStyle(.plain)
                 }
+
+                Button {
+                    NSApp.activate(ignoringOtherApps: true)
+                    for window in NSApp.windows {
+                        if window.title == "KeySync" || window.canBecomeKey {
+                            window.makeKeyAndOrderFront(nil)
+                            break
+                        }
+                    }
+                } label: {
+                    HStack(spacing: 6) {
+                        Image(systemName: "macwindow")
+                            .font(.system(size: 12))
+                        Text("Open KeySync Dashboard")
+                            .font(.system(size: 11, weight: .semibold))
+                    }
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 6)
+                    .background(RoundedRectangle(cornerRadius: 6).fill(Color.primary.opacity(0.06)))
+                }
+                .buttonStyle(.plain)
             }
             .padding(12)
 
