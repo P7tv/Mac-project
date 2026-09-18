@@ -56,4 +56,23 @@ final class AudioPacketTests: XCTestCase {
         XCTAssertEqual(medFrame[1], 126)
         XCTAssertEqual(medFrame.count, 4 + 2048)
     }
+
+    func testResampleStereoFloat() {
+        // 44.1kHz to 48kHz test
+        let inCount = 441
+        let leftIn = [Float32](repeating: 0.5, count: inCount)
+        let rightIn = [Float32](repeating: -0.5, count: inCount)
+
+        let resampled = AudioCaptureEngine.resampleStereoFloat(
+            left: leftIn,
+            right: rightIn,
+            from: 44100.0,
+            to: 48000.0
+        )
+
+        XCTAssertEqual(resampled.left.count, 480)
+        XCTAssertEqual(resampled.right.count, 480)
+        XCTAssertEqual(resampled.left[0], 0.5, accuracy: 0.001)
+        XCTAssertEqual(resampled.right[0], -0.5, accuracy: 0.001)
+    }
 }

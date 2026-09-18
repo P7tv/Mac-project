@@ -448,24 +448,43 @@ public enum WebAudioPlayer {
                     this.port.postMessage({ type: 'metrics', ms: ms });
                 }
 
-                // If pre-buffering or buffer underrun, fill silence softly
-                if (this.isBuffering || this.bufferedFrames < quantum) {
+                // If pre-buffering (first packet buildup), wait until target reached
+                if (this.isBuffering) {
                     outL.fill(0);
                     outR.fill(0);
-                    if (this.bufferedFrames < 64) {
-                        this.isBuffering = true; // wait for buffer buildup
-                    }
                     return true;
                 }
 
-                // Smooth clock drift adjustment (ONCE per quantum, pure pitch-neutral)
-                // If queue is growing > 30ms beyond target, consume 1 extra frame per 128 frames (~0.7% speedup)
-                if (this.bufferedFrames > this.targetFrames + 1440) {
+                // If buffer is critically low (< quantum), output available and soft-fade remaining
+                if (this.bufferedFrames < quantum) {
+                    const available = this.bufferedFrames;
+                    for (let i = 0; i < available; i++) {
+                        const fade = (available - i) / available;
+                        outL[i] = this.bufferL[this.readPtr] * fade;
+                        outR[i] = this.bufferR[this.readPtr] * fade;
+                        this.readPtr = (this.readPtr + 1) % this.capacity;
+                    }
+                    for (let i = available; i < quantum; i++) {
+                        outL[i] = 0;
+                        outR[i] = 0;
+                    }
+                    this.bufferedFrames = 0;
+                    return true;
+                }
+
+                // Bidirectional smooth clock drift adjustment (ONCE per quantum)
+                // If queue is running high (> target + 720 frames, ~15ms), consume 1 extra frame (~0.7% speedup)
+                if (this.bufferedFrames > this.targetFrames + 720) {
                     this.readPtr = (this.readPtr + 1) % this.capacity;
                     this.bufferedFrames--;
                 }
+                // If queue is running low (< target - 720 frames, ~15ms) but safe, repeat 1 frame (~0.7% slowdown)
+                else if (this.bufferedFrames < this.targetFrames - 720 && this.bufferedFrames > 256) {
+                    this.readPtr = (this.readPtr - 1 + this.capacity) % this.capacity;
+                    this.bufferedFrames++;
+                }
 
-                // Sequential clean audio output without index skipping
+                // Clean audio output
                 for (let i = 0; i < quantum; i++) {
                     outL[i] = this.bufferL[this.readPtr];
                     outR[i] = this.bufferR[this.readPtr];
@@ -649,11 +668,37 @@ public enum WebAudioPlayer {
                 const numFrames = int16View.length / 2;
                 if (numFrames === 0) return;
 
-                const left = new Float32Array(numFrames);
-                const right = new Float32Array(numFrames);
-                for (let i = 0; i < numFrames; i++) {
-                    left[i] = int16View[i * 2] / 32768.0;
-                    right[i] = int16View[i * 2 + 1] / 32768.0;
+                const hwRate = (audioCtx && audioCtx.sampleRate) ? audioCtx.sampleRate : 48000;
+                let left, right;
+
+                if (Math.abs(hwRate - 48000) > 1.0) {
+                    // Browser hardware runs at different sample rate (e.g. 44.1kHz on Bluetooth headsets)
+                    const ratio = 48000.0 / hwRate;
+                    const outFrames = Math.round(numFrames * hwRate / 48000.0);
+                    left = new Float32Array(outFrames);
+                    right = new Float32Array(outFrames);
+
+                    for (let j = 0; j < outFrames; j++) {
+                        const pos = Math.min(numFrames - 1, j * ratio);
+                        const idx = Math.floor(pos);
+                        const frac = pos - idx;
+                        const nextIdx = Math.min(idx + 1, numFrames - 1);
+
+                        const l1 = int16View[idx * 2] / 32768.0;
+                        const l2 = int16View[nextIdx * 2] / 32768.0;
+                        const r1 = int16View[idx * 2 + 1] / 32768.0;
+                        const r2 = int16View[nextIdx * 2 + 1] / 32768.0;
+
+                        left[j] = l1 * (1.0 - frac) + l2 * frac;
+                        right[j] = r1 * (1.0 - frac) + r2 * frac;
+                    }
+                } else {
+                    left = new Float32Array(numFrames);
+                    right = new Float32Array(numFrames);
+                    for (let i = 0; i < numFrames; i++) {
+                        left[i] = int16View[i * 2] / 32768.0;
+                        right[i] = int16View[i * 2 + 1] / 32768.0;
+                    }
                 }
 
                 // Transfer memory directly to AudioWorklet (zero-copy)

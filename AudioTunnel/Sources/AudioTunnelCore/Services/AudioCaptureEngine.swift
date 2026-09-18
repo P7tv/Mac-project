@@ -141,56 +141,77 @@ public final class AudioCaptureEngine: NSObject, SCStreamOutput, SCStreamDelegat
         let buffers = UnsafeMutableAudioBufferListPointer(bufferList)
         guard !buffers.isEmpty else { return }
 
-        var pcm16Data: Data
+        let sourceSampleRate = asbd.pointee.mSampleRate
+        var leftFloats: [Float32] = []
+        var rightFloats: [Float32] = []
 
         if buffers.count >= 2,
            let leftData = buffers[0].mData,
            let rightData = buffers[1].mData {
-            // Non-interleaved stereo Float32 -> Interleaved Int16
+            // Non-interleaved stereo Float32
             let frames = Int(buffers[0].mDataByteSize) / MemoryLayout<Float32>.size
-            let leftFloats = leftData.assumingMemoryBound(to: Float32.self)
-            let rightFloats = rightData.assumingMemoryBound(to: Float32.self)
-
-            var samples = [Int16]()
-            samples.reserveCapacity(frames * 2)
-            for i in 0..<frames {
-                let l = Int16(clamping: Int(leftFloats[i] * 32767.0))
-                let r = Int16(clamping: Int(rightFloats[i] * 32767.0))
-                samples.append(l)
-                samples.append(r)
-            }
-            pcm16Data = samples.withUnsafeBufferPointer { Data(buffer: $0) }
+            let lPtr = leftData.assumingMemoryBound(to: Float32.self)
+            let rPtr = rightData.assumingMemoryBound(to: Float32.self)
+            leftFloats = Array(UnsafeBufferPointer(start: lPtr, count: frames))
+            rightFloats = Array(UnsafeBufferPointer(start: rPtr, count: frames))
         } else if let dataPtr = buffers[0].mData {
-            // Interleaved Float32 or Int16
+            // Interleaved Float32
             let channels = Int(asbd.pointee.mChannelsPerFrame)
             let isFloat = (asbd.pointee.mFormatFlags & kAudioFormatFlagIsFloat) != 0
 
             if isFloat {
                 let floatPtr = dataPtr.assumingMemoryBound(to: Float32.self)
-                let sampleCount = Int(buffers[0].mDataByteSize) / MemoryLayout<Float32>.size
-                var samples = [Int16]()
-                samples.reserveCapacity(channels == 1 ? sampleCount * 2 : sampleCount)
+                let totalSamples = Int(buffers[0].mDataByteSize) / MemoryLayout<Float32>.size
+                let frames = channels == 1 ? totalSamples : totalSamples / 2
+                leftFloats.reserveCapacity(frames)
+                rightFloats.reserveCapacity(frames)
 
                 if channels == 1 {
-                    for i in 0..<sampleCount {
-                        let s = Int16(clamping: Int(floatPtr[i] * 32767.0))
-                        samples.append(s)
-                        samples.append(s)
+                    for i in 0..<frames {
+                        let s = floatPtr[i]
+                        leftFloats.append(s)
+                        rightFloats.append(s)
                     }
                 } else {
-                    for i in 0..<sampleCount {
-                        let s = Int16(clamping: Int(floatPtr[i] * 32767.0))
-                        samples.append(s)
+                    for i in 0..<frames {
+                        leftFloats.append(floatPtr[i * 2])
+                        rightFloats.append(floatPtr[i * 2 + 1])
                     }
                 }
-                pcm16Data = samples.withUnsafeBufferPointer { Data(buffer: $0) }
             } else {
-                pcm16Data = Data(bytes: dataPtr, count: Int(buffers[0].mDataByteSize))
+                // Raw Int16 fallback
+                let pcm16Data = Data(bytes: dataPtr, count: Int(buffers[0].mDataByteSize))
+                let rms = AudioPacket.calculateRMS(pcm16Data: pcm16Data)
+                delegate?.audioCaptureEngine(didCapturePCMData: pcm16Data, rmsLevel: rms)
+                return
             }
         } else {
             return
         }
 
+        // Resample to 48000 Hz if input rate differs (e.g. 44.1kHz from system/AirPods)
+        if abs(sourceSampleRate - 48000.0) > 1.0 && sourceSampleRate > 0 {
+            let resampled = AudioCaptureEngine.resampleStereoFloat(
+                left: leftFloats,
+                right: rightFloats,
+                from: sourceSampleRate,
+                to: 48000.0
+            )
+            leftFloats = resampled.left
+            rightFloats = resampled.right
+        }
+
+        let frames = leftFloats.count
+        var samples = [Int16]()
+        samples.reserveCapacity(frames * 2)
+        for i in 0..<frames {
+            let l = Int16(clamping: Int(leftFloats[i] * 32767.0))
+            let r = Int16(clamping: Int(rightFloats[i] * 32767.0))
+            samples.append(l)
+            samples.append(r)
+        }
+
+        let pcm16Data = samples.withUnsafeBufferPointer { Data(buffer: $0) }
         let rms = AudioPacket.calculateRMS(pcm16Data: pcm16Data)
         delegate?.audioCaptureEngine(didCapturePCMData: pcm16Data, rmsLevel: rms)
     }
@@ -285,6 +306,38 @@ public final class AudioCaptureEngine: NSObject, SCStreamOutput, SCStreamDelegat
     }
 
     // MARK: - Helpers
+    public static func resampleStereoFloat(
+        left: [Float32],
+        right: [Float32],
+        from inRate: Double,
+        to outRate: Double
+    ) -> (left: [Float32], right: [Float32]) {
+        guard left.count == right.count, left.count > 1, inRate > 0, outRate > 0, abs(inRate - outRate) > 1.0 else {
+            return (left, right)
+        }
+
+        let ratio = inRate / outRate
+        let outCount = Int(round(Double(left.count) * outRate / inRate))
+        guard outCount > 0 else { return (left, right) }
+
+        var resampledL = [Float32](repeating: 0, count: outCount)
+        var resampledR = [Float32](repeating: 0, count: outCount)
+
+        let inMax = Double(left.count - 1)
+
+        for i in 0..<outCount {
+            let pos = min(inMax, Double(i) * ratio)
+            let idx = Int(pos)
+            let frac = Float32(pos - Double(idx))
+            let nextIdx = min(idx + 1, left.count - 1)
+
+            resampledL[i] = left[idx] * (1.0 - frac) + left[nextIdx] * frac
+            resampledR[i] = right[idx] * (1.0 - frac) + right[nextIdx] * frac
+        }
+
+        return (resampledL, resampledR)
+    }
+
     private func convertFloat32ToInt16(rawData: Data, channelCount: Int) -> Data {
         let floatCount = rawData.count / MemoryLayout<Float32>.size
         var result = Data(capacity: floatCount * MemoryLayout<Int16>.size)
