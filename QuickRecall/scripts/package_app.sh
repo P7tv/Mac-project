@@ -21,6 +21,10 @@ mkdir -p "$RESOURCES_DIR"
 echo "🚚 Copying binary and assets..."
 cp ".build/release/$APP_NAME" "$MACOS_DIR/$APP_NAME"
 cp "$PROJECT_DIR/Resources/Info.plist" "$CONTENTS_DIR/Info.plist"
+if [ -f "$PROJECT_DIR/Resources/AppIcon.icns" ]; then
+    cp "$PROJECT_DIR/Resources/AppIcon.icns" "$RESOURCES_DIR/AppIcon.icns"
+    echo "🎨 AppIcon.icns bundled successfully."
+fi
 
 echo "🔐 Ad-hoc code signing..."
 codesign --force --deep --sign - "$BUNDLE_DIR"
