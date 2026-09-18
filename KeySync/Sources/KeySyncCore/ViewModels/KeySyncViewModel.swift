@@ -2,12 +2,15 @@ import Foundation
 import SwiftUI
 import AppKit
 import Combine
+import ApplicationServices
 
 @MainActor
 public final class KeySyncViewModel: ObservableObject {
     @Published public var isRunning: Bool = false
     @Published public var isClientConnected: Bool = false
     @Published public var isControllingRemote: Bool = false
+    @Published public var hasAccessibilityPermission: Bool = false
+    @Published public var lastEventDescription: String = "Ready to Sync"
     @Published public var selectedEdge: ScreenEdge = .right {
         didSet {
             interceptor.updateEdge(selectedEdge)
@@ -24,9 +27,26 @@ public final class KeySyncViewModel: ObservableObject {
         self.server = KeySyncServer(port: port)
         self.interceptor = EventInterceptor(edge: .right)
 
+        checkPermissions()
         detectLocalIP()
         setupCallbacks()
         startServer()
+    }
+
+    public func checkPermissions() {
+        self.hasAccessibilityPermission = AXIsProcessTrusted()
+    }
+
+    public func requestAccessibilityPermission() {
+        let options = ["AXTrustedCheckOptionPrompt" as CFString: true as CFBoolean] as CFDictionary
+        _ = AXIsProcessTrustedWithOptions(options)
+        openAccessibilitySettings()
+    }
+
+    public func openAccessibilitySettings() {
+        if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility") {
+            NSWorkspace.shared.open(url)
+        }
     }
 
     private func detectLocalIP() {
@@ -60,6 +80,13 @@ public final class KeySyncViewModel: ObservableObject {
         server.onClientConnected = { [weak self] connected in
             Task { @MainActor in
                 self?.isClientConnected = connected
+                self?.interceptor.canControlRemote = connected
+                if connected {
+                    self?.lastEventDescription = "Windows PC Connected"
+                } else {
+                    self?.lastEventDescription = "Waiting for Windows PC"
+                    self?.interceptor.setControllingRemote(false)
+                }
             }
         }
 
@@ -72,12 +99,31 @@ public final class KeySyncViewModel: ObservableObject {
         interceptor.onEventIntercepted = { [weak self] event in
             self?.server.sendEvent(event)
         }
+
+        interceptor.onLastEventDescription = { [weak self] desc in
+            Task { @MainActor in
+                self?.lastEventDescription = desc
+            }
+        }
+    }
+
+    public func toggleRunning() {
+        if isRunning {
+            stopServer()
+        } else {
+            startServer()
+        }
     }
 
     public func startServer() {
+        checkPermissions()
         do {
             try server.start()
-            startMouseTracking()
+            if hasAccessibilityPermission {
+                interceptor.start()
+            } else {
+                startMouseTrackingFallback()
+            }
             isRunning = true
         } catch {
             print("[KeySyncViewModel] Error: \(error)")
@@ -85,14 +131,15 @@ public final class KeySyncViewModel: ObservableObject {
     }
 
     public func stopServer() {
-        stopMouseTracking()
+        interceptor.stop()
+        stopMouseTrackingFallback()
         server.stop()
         isRunning = false
     }
 
-    private func startMouseTracking() {
+    private func startMouseTrackingFallback() {
         guard globalMonitor == nil else { return }
-        globalMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.mouseMoved, .leftMouseDragged, .rightMouseDragged]) { [weak self] event in
+        globalMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.mouseMoved, .leftMouseDragged, .rightMouseDragged]) { [weak self] _ in
             let point = NSEvent.mouseLocation
             Task { @MainActor in
                 self?.interceptor.handleMouseMoved(to: point)
@@ -100,7 +147,7 @@ public final class KeySyncViewModel: ObservableObject {
         }
     }
 
-    private func stopMouseTracking() {
+    private func stopMouseTrackingFallback() {
         if let monitor = globalMonitor {
             NSEvent.removeMonitor(monitor)
             globalMonitor = nil
@@ -109,5 +156,13 @@ public final class KeySyncViewModel: ObservableObject {
 
     public func panicRelease() {
         interceptor.triggerPanicRelease()
+        lastEventDescription = "Released to Mac"
+    }
+
+    public func copyClientCommand() {
+        let cmd = "python keysync_client.py \(localIP)"
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(cmd, forType: .string)
+        lastEventDescription = "Copied Windows Command!"
     }
 }
