@@ -5,4 +5,4 @@ Packages/
 *.xcworkspace
 xcuserdata/
 DerivedData/
-DropMorph.app/
+*.app/
