@@ -32,4 +32,25 @@ final class EventInterceptorTests: XCTestCase {
         XCTAssertTrue(bottomDetector.hasHitEdge(point: CGPoint(x: 500, y: 1079), in: screen))
         XCTAssertFalse(bottomDetector.hasHitEdge(point: CGPoint(x: 500, y: 500), in: screen))
     }
+
+    func testVirtualCursorMovementAndBoundaryReturn() {
+        let screen = CGRect(x: 0, y: 0, width: 1920, height: 1080)
+        let interceptor = EventInterceptor(edge: .right, screenBounds: screen)
+
+        // 1. Hit right edge -> transitions to controlling remote
+        interceptor.handleMouseMoved(to: CGPoint(x: 1919, y: 500))
+        XCTAssertTrue(interceptor.isControllingRemote)
+
+        // 2. Move deep into remote screen (dx = +300)
+        interceptor.handleMouseMoved(to: CGPoint(x: 1919 + 300, y: 500))
+        XCTAssertTrue(interceptor.isControllingRemote)
+
+        // 3. Move back to the left on remote (dx = -200) -> Still controlling remote! (Not returned prematurely)
+        interceptor.handleMouseMoved(to: CGPoint(x: 1919 + 100, y: 500))
+        XCTAssertTrue(interceptor.isControllingRemote)
+
+        // 4. Push past the left boundary (dx = -150) -> User actively pushed past 0 -> Returns to Mac
+        interceptor.handleMouseMoved(to: CGPoint(x: 1919 - 50, y: 500))
+        XCTAssertFalse(interceptor.isControllingRemote)
+    }
 }

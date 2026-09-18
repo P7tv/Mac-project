@@ -7,11 +7,14 @@ public final class EventInterceptor: @unchecked Sendable {
     public var edgeDetector: EdgeDetector
     public var targetScreenBounds: CGRect
     public var canControlRemote: Bool = true
+    public var remoteScreenSize: CGSize = CGSize(width: 1920, height: 1080)
 
     private var eventTap: CFMachPort?
     private var runLoopSource: CFRunLoopSource?
     private var lastLocalPoint: CGPoint = .zero
     private var lockedEdgePoint: CGPoint = .zero
+    private var virtualRemoteX: CGFloat = 0.0
+    private var virtualRemoteY: CGFloat = 0.0
     private let lock = NSLock()
 
     public var onControlStateChanged: (@Sendable (Bool) -> Void)?
@@ -117,6 +120,20 @@ public final class EventInterceptor: @unchecked Sendable {
                     lock.lock()
                     self.lockedEdgePoint = location
                     self.lastLocalPoint = location
+                    switch edgeDetector.edge {
+                    case .right:
+                        virtualRemoteX = 0
+                        virtualRemoteY = location.y
+                    case .left:
+                        virtualRemoteX = remoteScreenSize.width
+                        virtualRemoteY = location.y
+                    case .top:
+                        virtualRemoteX = location.x
+                        virtualRemoteY = remoteScreenSize.height
+                    case .bottom:
+                        virtualRemoteX = location.x
+                        virtualRemoteY = 0
+                    }
                     lock.unlock()
                     setControllingRemote(true)
                     CGWarpMouseCursorPosition(location)
@@ -145,22 +162,59 @@ public final class EventInterceptor: @unchecked Sendable {
             let lastPoint = lastLocalPoint
             let lockedPoint = lockedEdgePoint
             lastLocalPoint = location
-            lock.unlock()
-
-            // Return condition: moved back across the edge
-            if edgeDetector.hasReturnedFromEdge(point: location, in: targetScreenBounds) {
-                setControllingRemote(false)
-                let returnPoint = calculateReturnPoint(from: location)
-                CGWarpMouseCursorPosition(returnPoint)
-                onLastEventDescription?("Returned to Mac")
-                return nil
-            }
 
             let dx = Double(event.getDoubleValueField(.mouseEventDeltaX))
             let dy = Double(event.getDoubleValueField(.mouseEventDeltaY))
 
             let finalDx = (dx != 0) ? dx : Double(location.x - lastPoint.x)
             let finalDy = (dy != 0) ? dy : Double(location.y - lastPoint.y)
+
+            virtualRemoteX += finalDx
+            virtualRemoteY += finalDy
+
+            // Check if user has intentionally pushed across the remote boundary to return to Mac
+            var shouldReturn = false
+            switch edgeDetector.edge {
+            case .right:
+                // User pushed left past the left edge of Windows screen
+                if virtualRemoteX < -15.0 {
+                    shouldReturn = true
+                } else {
+                    virtualRemoteX = min(remoteScreenSize.width, max(0, virtualRemoteX))
+                }
+            case .left:
+                // User pushed right past the right edge of Windows screen
+                if virtualRemoteX > remoteScreenSize.width + 15.0 {
+                    shouldReturn = true
+                } else {
+                    virtualRemoteX = min(remoteScreenSize.width, max(0, virtualRemoteX))
+                }
+            case .top:
+                // User pushed down past bottom of Windows screen
+                if virtualRemoteY > remoteScreenSize.height + 15.0 {
+                    shouldReturn = true
+                } else {
+                    virtualRemoteY = min(remoteScreenSize.height, max(0, virtualRemoteY))
+                }
+            case .bottom:
+                // User pushed up past top of Windows screen
+                if virtualRemoteY < -15.0 {
+                    shouldReturn = true
+                } else {
+                    virtualRemoteY = min(remoteScreenSize.height, max(0, virtualRemoteY))
+                }
+            }
+
+            if shouldReturn {
+                lock.unlock()
+                setControllingRemote(false)
+                let returnPoint = calculateReturnPoint(from: lockedPoint)
+                CGWarpMouseCursorPosition(returnPoint)
+                onLastEventDescription?("Returned to Mac")
+                return nil
+            }
+
+            lock.unlock()
 
             if abs(finalDx) > 0.1 || abs(finalDy) > 0.1 {
                 let inputEvent = InputEvent.move(dx: finalDx, dy: finalDy)
@@ -254,19 +308,57 @@ public final class EventInterceptor: @unchecked Sendable {
         let controlling = isControllingRemote
         let lastPoint = lastLocalPoint
         lastLocalPoint = currentPoint
-        lock.unlock()
 
         if !controlling {
-            if edgeDetector.hasHitEdge(point: currentPoint, in: targetScreenBounds) {
+            if edgeDetector.hasHitEdge(point: currentPoint, in: targetScreenBounds) && canControlRemote {
+                switch edgeDetector.edge {
+                case .right:
+                    virtualRemoteX = 0
+                    virtualRemoteY = currentPoint.y
+                case .left:
+                    virtualRemoteX = remoteScreenSize.width
+                    virtualRemoteY = currentPoint.y
+                case .top:
+                    virtualRemoteX = currentPoint.x
+                    virtualRemoteY = remoteScreenSize.height
+                case .bottom:
+                    virtualRemoteX = currentPoint.x
+                    virtualRemoteY = 0
+                }
+                lock.unlock()
                 setControllingRemote(true)
+                return
             }
+            lock.unlock()
         } else {
-            if edgeDetector.hasReturnedFromEdge(point: currentPoint, in: targetScreenBounds) {
+            let dx = currentPoint.x - lastPoint.x
+            let dy = currentPoint.y - lastPoint.y
+            virtualRemoteX += dx
+            virtualRemoteY += dy
+
+            var shouldReturn = false
+            switch edgeDetector.edge {
+            case .right:
+                if virtualRemoteX < -15.0 { shouldReturn = true }
+                else { virtualRemoteX = min(remoteScreenSize.width, max(0, virtualRemoteX)) }
+            case .left:
+                if virtualRemoteX > remoteScreenSize.width + 15.0 { shouldReturn = true }
+                else { virtualRemoteX = min(remoteScreenSize.width, max(0, virtualRemoteX)) }
+            case .top:
+                if virtualRemoteY > remoteScreenSize.height + 15.0 { shouldReturn = true }
+                else { virtualRemoteY = min(remoteScreenSize.height, max(0, virtualRemoteY)) }
+            case .bottom:
+                if virtualRemoteY < -15.0 { shouldReturn = true }
+                else { virtualRemoteY = min(remoteScreenSize.height, max(0, virtualRemoteY)) }
+            }
+
+            if shouldReturn {
+                lock.unlock()
                 setControllingRemote(false)
                 return
             }
-            let dx = currentPoint.x - lastPoint.x
-            let dy = currentPoint.y - lastPoint.y
+            lock.unlock()
+
             if abs(dx) > 0.1 || abs(dy) > 0.1 {
                 onEventIntercepted?(InputEvent.move(dx: dx, dy: dy))
             }
