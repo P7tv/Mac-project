@@ -30,6 +30,11 @@ public final class ScreenCaptureEngine: NSObject, SCStreamOutput, SCStreamDelega
     private var isStreaming = false
     private var quality: Double = 0.75
     private var lastPreviewTime: CFAbsoluteTime = 0
+    private var activeDisplayID: CGDirectDisplayID?
+    private var activeFPS: Int = 60
+    private var isProcessingFrame = false
+    private let processingLock = NSLock()
+    private static let sharedColorSpace = CGColorSpaceCreateDeviceRGB()
     public var onCaptureError: (@Sendable (Error) -> Void)?
 
     public override init() {
@@ -63,6 +68,8 @@ public final class ScreenCaptureEngine: NSObject, SCStreamOutput, SCStreamDelega
 
         self.quality = quality
         self.lastPreviewTime = 0
+        self.activeDisplayID = displayID
+        self.activeFPS = fps
 
         var targetDisplay: SCDisplay?
         for attempt in 1...6 {
@@ -86,7 +93,7 @@ public final class ScreenCaptureEngine: NSObject, SCStreamOutput, SCStreamDelega
         config.minimumFrameInterval = CMTime(value: 1, timescale: Int32(fps))
         config.pixelFormat = kCVPixelFormatType_32BGRA
         config.showsCursor = true
-        config.queueDepth = 3
+        config.queueDepth = 6
 
         let scStream = SCStream(filter: filter, configuration: config, delegate: self)
         try scStream.addStreamOutput(self, type: .screen, sampleHandlerQueue: queue)
@@ -109,6 +116,9 @@ public final class ScreenCaptureEngine: NSObject, SCStreamOutput, SCStreamDelega
             self.stream = nil
         }
         onFrameCallback = nil
+        processingLock.lock()
+        isProcessingFrame = false
+        processingLock.unlock()
     }
 
     public func updateQuality(_ quality: Double) {
@@ -120,8 +130,48 @@ public final class ScreenCaptureEngine: NSObject, SCStreamOutput, SCStreamDelega
     // SCStreamOutput protocol
     public func stream(_ stream: SCStream, didStopWithError error: Error) {
         guard self.stream === stream else { return }
+        let nsError = error as NSError
+        print("[ScreenCaptureEngine] Stream stopped with error: \(error.localizedDescription) (code: \(nsError.code))")
+
+        // Seamless auto-recovery for recoverable system errors:
+        // -3821: SCStreamError.systemStopped (daemon pressure or transient stop)
+        // -3808: SCStreamError.streamAlreadyStopped
+        // -3801: SCStreamError.userDeclined / transient display reconfiguration
+        if isStreaming, let displayID = activeDisplayID, (nsError.code == -3821 || nsError.code == -3808 || nsError.code == -3801) {
+            print("[ScreenCaptureEngine] Attempting seamless stream recovery in 300ms...")
+            queue.asyncAfter(deadline: .now() + 0.3) { [weak self] in
+                guard let self = self, self.isStreaming else { return }
+                Task {
+                    do {
+                        try await self.restartCapture(displayID: displayID)
+                        print("[ScreenCaptureEngine] Seamless stream recovery successful on displayID: \(displayID)!")
+                    } catch {
+                        print("[ScreenCaptureEngine] Stream recovery failed: \(error)")
+                        self.stopCapture()
+                        self.onCaptureError?(error)
+                    }
+                }
+            }
+            return
+        }
+
         stopCapture()
         onCaptureError?(error)
+    }
+
+    private func restartCapture(displayID: CGDirectDisplayID) async throws {
+        if let s = stream {
+            try? await s.stopCapture()
+            self.stream = nil
+        }
+        try await Task.sleep(nanoseconds: 150_000_000)
+        guard isStreaming, let callback = onFrameCallback else { return }
+        try await startCapture(
+            displayID: displayID,
+            fps: activeFPS,
+            quality: quality,
+            onFrame: callback
+        )
     }
 
     public func stream(_ stream: SCStream, didOutputSampleBuffer sampleBuffer: CMSampleBuffer, of type: SCStreamOutputType) {
@@ -130,8 +180,22 @@ public final class ScreenCaptureEngine: NSObject, SCStreamOutput, SCStreamDelega
               let attachments = CMSampleBufferGetSampleAttachmentsArray(sampleBuffer, createIfNecessary: false) as? [[SCStreamFrameInfo: Any]],
               let status = attachments.first?[.status] as? Int,
               status == SCFrameStatus.complete.rawValue else { return }
-        // ScreenCaptureKit already enforces minimumFrameInterval. A second
-        // wall-clock limiter drops valid frames when callbacks arrive with jitter.
+
+        // Drop intermediate captured frames if previous frame is still encoding
+        // to prevent ScreenCaptureKit queue saturation and -3821 daemon kill.
+        processingLock.lock()
+        if isProcessingFrame {
+            processingLock.unlock()
+            return
+        }
+        isProcessingFrame = true
+        processingLock.unlock()
+
+        defer {
+            processingLock.lock()
+            isProcessingFrame = false
+            processingLock.unlock()
+        }
 
         guard let imageBuffer = CMSampleBufferGetImageBuffer(sampleBuffer) else { return }
 
@@ -143,7 +207,7 @@ public final class ScreenCaptureEngine: NSObject, SCStreamOutput, SCStreamDelega
         let bytesPerRow = CVPixelBufferGetBytesPerRow(imageBuffer)
         guard let baseAddress = CVPixelBufferGetBaseAddress(imageBuffer) else { return }
 
-        let colorSpace = CGColorSpaceCreateDeviceRGB()
+        let colorSpace = Self.sharedColorSpace
         let bitmapInfo = CGBitmapInfo(rawValue: CGBitmapInfo.byteOrder32Little.rawValue | CGImageAlphaInfo.premultipliedFirst.rawValue)
 
         guard let context = CGContext(
@@ -177,5 +241,4 @@ public final class ScreenCaptureEngine: NSObject, SCStreamOutput, SCStreamDelega
         }
         onFrameCallback?(jpegData as Data, previewImage)
     }
-
 }

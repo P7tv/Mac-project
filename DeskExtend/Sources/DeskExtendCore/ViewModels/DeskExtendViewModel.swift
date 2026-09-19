@@ -9,7 +9,7 @@ public final class DeskExtendViewModel: ObservableObject {
     @Published public var isStarting: Bool = false
     @Published public var selectedResolution: DisplayResolution = .fullHD
     @Published public var targetFPS: Int = 60
-    @Published public var streamQuality: Double = 0.8 {
+    @Published public var streamQuality: Double = 0.75 {
         didSet { captureEngine.updateQuality(streamQuality) }
     }
     @Published public var networkAddresses: [NetworkAddress] = []
@@ -29,6 +29,7 @@ public final class DeskExtendViewModel: ObservableObject {
         checkPermissions()
         captureEngine.onCaptureError = { [weak self] error in
             Task { @MainActor in
+                print("[DeskExtendViewModel] Fatal capture error received: \(error)")
                 self?.stopStreaming()
                 self?.checkPermissions()
                 self?.alertMessage = "การส่งภาพหยุดทำงาน: \(error.localizedDescription)"
