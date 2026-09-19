@@ -78,6 +78,21 @@ public final class AirBridgeViewModel: ObservableObject {
             }
         }
 
+        // When remote phone/PC uploads a file -> save to Downloads and record
+        server.onFileReceived = { [weak self] filename, savedURL in
+            Task { @MainActor in
+                let size = (try? FileManager.default.attributesOfItem(atPath: savedURL.path)[.size] as? Int64) ?? 0
+                let item = ClipboardItem(
+                    type: .file,
+                    content: savedURL.path,
+                    previewText: "File: \(filename)",
+                    fileSize: size
+                )
+                self?.addItemToHistory(item)
+                self?.showToast("📥 Saved \(filename) to Downloads")
+            }
+        }
+
         server.onClientCountChanged = { [weak self] count in
             Task { @MainActor in
                 self?.connectedClients = count
@@ -122,6 +137,11 @@ public final class AirBridgeViewModel: ObservableObject {
     public func copyItemToMac(_ item: ClipboardItem) {
         watcher.copyToPasteboard(item: item)
         showToast("📋 Copied to Mac Clipboard")
+    }
+
+    public func revealInFinder(_ path: String) {
+        let url = URL(fileURLWithPath: path)
+        NSWorkspace.shared.activateFileViewerSelecting([url])
     }
 
     public func addItemToHistory(_ item: ClipboardItem) {

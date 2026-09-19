@@ -99,4 +99,132 @@ final class ServerTests: XCTestCase {
         await fulfillment(of: [receiveExp], timeout: 5.0)
         wsTask.cancel(with: .normalClosure, reason: nil)
     }
+
+    func testFileUploadToDownloads() async throws {
+        let tempDir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: tempDir) }
+
+        server.customDownloadDirectory = tempDir
+        try server.start()
+
+        let fileReceivedExp = expectation(description: "Server receives uploaded file")
+        final class ResultBox: @unchecked Sendable {
+            var filename: String = ""
+            var url: URL?
+        }
+        let box = ResultBox()
+
+        server.onFileReceived = { filename, url in
+            box.filename = filename
+            box.url = url
+            fileReceivedExp.fulfill()
+        }
+
+        let uploadURL = URL(string: "http://127.0.0.1:\(testPort)/api/upload")!
+        var req = URLRequest(url: uploadURL)
+        req.httpMethod = "POST"
+
+        let boundary = "Boundary-\(UUID().uuidString)"
+        req.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
+
+        let fileContent = Data([0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 0x00, 0x01, 0x02, 0x03, 0xFF]) // PNG signature + dummy bytes
+        var body = Data()
+        body.append("--\(boundary)\r\n".data(using: .utf8)!)
+        body.append("Content-Disposition: form-data; name=\"file\"; filename=\"cyber_report.png\"\r\n".data(using: .utf8)!)
+        body.append("Content-Type: image/png\r\n\r\n".data(using: .utf8)!)
+        body.append(fileContent)
+        body.append("\r\n--\(boundary)--\r\n".data(using: .utf8)!)
+        req.httpBody = body
+
+        let (respData, response) = try await URLSession.shared.data(for: req)
+        guard let httpResponse = response as? HTTPURLResponse else {
+            XCTFail("Response is not HTTPURLResponse")
+            return
+        }
+
+        XCTAssertEqual(httpResponse.statusCode, 200)
+        let json = (try? JSONSerialization.jsonObject(with: respData)) as? [String: Any]
+        XCTAssertEqual(json?["status"] as? String, "ok")
+        XCTAssertEqual(json?["filename"] as? String, "cyber_report.png")
+
+        await fulfillment(of: [fileReceivedExp], timeout: 5.0)
+        XCTAssertEqual(box.filename, "cyber_report.png")
+        guard let savedURL = box.url else {
+            XCTFail("Saved URL is nil")
+            return
+        }
+
+        XCTAssertTrue(FileManager.default.fileExists(atPath: savedURL.path))
+        let savedData = try Data(contentsOf: savedURL)
+        XCTAssertEqual(savedData, fileContent)
+    }
+
+    func testFileUploadDuplicateNames() async throws {
+        let tempDir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: tempDir) }
+
+        server.customDownloadDirectory = tempDir
+        try server.start()
+
+        let existingFile = tempDir.appendingPathComponent("document.pdf")
+        try Data("Original".utf8).write(to: existingFile)
+
+        let uploadURL = URL(string: "http://127.0.0.1:\(testPort)/api/upload")!
+        var req = URLRequest(url: uploadURL)
+        req.httpMethod = "POST"
+
+        let boundary = "Boundary-123"
+        req.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
+
+        let newContent = Data("New Uploaded Document".utf8)
+        var body = Data()
+        body.append("--\(boundary)\r\n".data(using: .utf8)!)
+        body.append("Content-Disposition: form-data; name=\"file\"; filename=\"document.pdf\"\r\n\r\n".data(using: .utf8)!)
+        body.append(newContent)
+        body.append("\r\n--\(boundary)--\r\n".data(using: .utf8)!)
+        req.httpBody = body
+
+        let (respData, response) = try await URLSession.shared.data(for: req)
+        let httpResponse = try XCTUnwrap(response as? HTTPURLResponse)
+        XCTAssertEqual(httpResponse.statusCode, 200)
+
+        let json = (try? JSONSerialization.jsonObject(with: respData)) as? [String: Any]
+        XCTAssertEqual(json?["filename"] as? String, "document (1).pdf")
+
+        let newFileURL = tempDir.appendingPathComponent("document (1).pdf")
+        XCTAssertTrue(FileManager.default.fileExists(atPath: newFileURL.path))
+        XCTAssertEqual(try Data(contentsOf: newFileURL), newContent)
+        XCTAssertEqual(try String(contentsOf: existingFile, encoding: .utf8), "Original")
+    }
+
+    func testFileUploadRawBinaryWithHeader() async throws {
+        let tempDir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: tempDir) }
+
+        server.customDownloadDirectory = tempDir
+        try server.start()
+
+        let uploadURL = URL(string: "http://127.0.0.1:\(testPort)/api/upload")!
+        var req = URLRequest(url: uploadURL)
+        req.httpMethod = "POST"
+        req.setValue("binary_notes.txt", forHTTPHeaderField: "X-Filename")
+        req.setValue("application/octet-stream", forHTTPHeaderField: "Content-Type")
+
+        let rawBytes = Data("Direct binary stream file payload".utf8)
+        req.httpBody = rawBytes
+
+        let (respData, response) = try await URLSession.shared.data(for: req)
+        let httpResponse = try XCTUnwrap(response as? HTTPURLResponse)
+        XCTAssertEqual(httpResponse.statusCode, 200)
+
+        let json = (try? JSONSerialization.jsonObject(with: respData)) as? [String: Any]
+        XCTAssertEqual(json?["filename"] as? String, "binary_notes.txt")
+
+        let savedURL = tempDir.appendingPathComponent("binary_notes.txt")
+        XCTAssertTrue(FileManager.default.fileExists(atPath: savedURL.path))
+        XCTAssertEqual(try Data(contentsOf: savedURL), rawBytes)
+    }
 }

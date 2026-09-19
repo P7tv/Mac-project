@@ -174,9 +174,11 @@ public struct MenuBarView: View {
                             }
                         } else {
                             ForEach(viewModel.recentItems) { item in
-                                ClipboardItemRow(item: item) {
+                                ClipboardItemRow(item: item, onCopy: {
                                     viewModel.copyItemToMac(item)
-                                }
+                                }, onReveal: {
+                                    viewModel.revealInFinder(item.content)
+                                })
                             }
                         }
                     }
@@ -230,6 +232,7 @@ public struct MenuBarView: View {
 struct ClipboardItemRow: View {
     let item: ClipboardItem
     let onCopy: () -> Void
+    var onReveal: (() -> Void)? = nil
 
     var body: some View {
         HStack(spacing: 8) {
@@ -242,6 +245,18 @@ struct ClipboardItemRow: View {
                 .font(.system(size: 11))
                 .lineLimit(2)
                 .frame(maxWidth: .infinity, alignment: .leading)
+
+            if item.type == .file, let onReveal = onReveal {
+                Button {
+                    onReveal()
+                } label: {
+                    Image(systemName: "folder")
+                        .font(.system(size: 11))
+                        .foregroundColor(.secondary)
+                }
+                .buttonStyle(.plain)
+                .help("Show in Finder")
+            }
 
             Button {
                 onCopy()

@@ -359,25 +359,55 @@ public struct MobileWebPortal {
           }
         }
 
-        async function handleFileSelected(e) {
+        function handleFileSelected(e) {
           const file = e.target.files[0];
           if (!file) return;
           const status = document.getElementById('fileStatus');
-          status.innerText = `Uploading ${file.name}...`;
+          status.innerText = `Uploading ${file.name} (0%)...`;
 
           const formData = new FormData();
-          formData.append('file', file);
-          try {
-            await fetch('/api/upload', {
-              method: 'POST',
-              headers: { 'Authorization': `Bearer ${token}` },
-              body: formData
-            });
-            status.innerText = `✅ Sent ${file.name} to Mac!`;
-            showToast('Sent to Mac Downloads!');
-          } catch (err) {
-            status.innerText = `Failed: ${err.message}`;
+          formData.append('file', file, file.name);
+
+          const xhr = new XMLHttpRequest();
+          xhr.open('POST', '/api/upload', true);
+          if (token) {
+            xhr.setRequestHeader('Authorization', `Bearer ${token}`);
           }
+          xhr.setRequestHeader('X-Filename', encodeURIComponent(file.name));
+
+          xhr.upload.onprogress = function(event) {
+            if (event.lengthComputable) {
+              const percent = Math.round((event.loaded / event.total) * 100);
+              status.innerText = `Uploading ${file.name} (${percent}%)...`;
+            }
+          };
+
+          xhr.onload = function() {
+            if (xhr.status === 200) {
+              try {
+                const res = JSON.parse(xhr.responseText);
+                status.innerText = `✅ Saved ${res.filename || file.name} to Mac Downloads!`;
+                showToast('Saved to Mac Downloads!');
+              } catch (_) {
+                status.innerText = `✅ Saved ${file.name} to Mac Downloads!`;
+                showToast('Saved to Mac Downloads!');
+              }
+              e.target.value = '';
+            } else {
+              try {
+                const errRes = JSON.parse(xhr.responseText);
+                status.innerText = `❌ Failed (${xhr.status}): ${errRes.error || 'Upload error'}`;
+              } catch (_) {
+                status.innerText = `❌ Failed (${xhr.status}): ${xhr.statusText || 'Upload error'}`;
+              }
+            }
+          };
+
+          xhr.onerror = function() {
+            status.innerText = `❌ Network Error: Could not reach Mac`;
+          };
+
+          xhr.send(formData);
         }
 
         if (token) {

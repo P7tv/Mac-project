@@ -18,6 +18,8 @@ public final class AirBridgeServer: @unchecked Sendable {
     public var latestItem: ClipboardItem?
     public var onClientPushedItem: (@Sendable (ClipboardItem) -> Void)?
     public var onClientCountChanged: (@Sendable (Int) -> Void)?
+    public var onFileReceived: (@Sendable (String, URL) -> Void)?
+    public var customDownloadDirectory: URL? = nil
 
     public init(port: UInt16 = 5050, securityManager: SecurityManager = SecurityManager()) {
         self.port = port
@@ -157,75 +159,127 @@ public final class AirBridgeServer: @unchecked Sendable {
         }
         lock.unlock()
 
-        guard let requestString = String(data: accumulated, encoding: .utf8) else { return }
+        // Locate HTTP header boundary without decoding binary body as UTF-8
+        let crlfCrlf = Data([13, 10, 13, 10])
+        let lfLf = Data([10, 10])
+        let headerDelimiterRange: Range<Data.Index>
+        if let r = accumulated.range(of: crlfCrlf) {
+            headerDelimiterRange = r
+        } else if let r = accumulated.range(of: lfLf) {
+            headerDelimiterRange = r
+        } else {
+            // Still waiting for complete headers
+            return
+        }
+
+        let headerData = accumulated[accumulated.startIndex..<headerDelimiterRange.lowerBound]
+        guard let headersPart = String(data: headerData, encoding: .utf8) ?? String(data: headerData, encoding: .ascii) else {
+            return
+        }
 
         // WebSocket Upgrade
-        if requestString.lowercased().contains("upgrade: websocket") {
+        if headersPart.lowercased().contains("upgrade: websocket") {
             lock.lock()
             connectionBuffers.removeValue(forKey: id)
             lock.unlock()
-            handleWebSocketHandshake(requestString: requestString, connection: connection, id: id)
+            handleWebSocketHandshake(requestString: headersPart, connection: connection, id: id)
             return
         }
 
-        // Check if full HTTP headers are received
-        let headerDelimiter: String
-        if requestString.contains("\r\n\r\n") {
-            headerDelimiter = "\r\n\r\n"
-        } else if requestString.contains("\n\n") {
-            headerDelimiter = "\n\n"
-        } else {
-            // Still waiting for headers
-            return
-        }
-
-        let headerEndRange = requestString.range(of: headerDelimiter)!
-        let headersPart = String(requestString[..<headerEndRange.lowerBound])
-        let bodyPart = String(requestString[headerEndRange.upperBound...])
-
-        // Parse Content-Length if present
         var expectedContentLength = 0
+        var contentType = ""
+        var authorizationHeader = ""
+        var xFilenameHeader: String? = nil
+
         for line in headersPart.components(separatedBy: .newlines) {
-            if line.lowercased().hasPrefix("content-length:") {
+            let lower = line.lowercased()
+            if lower.hasPrefix("content-length:") {
                 let parts = line.split(separator: ":", maxSplits: 1)
                 if parts.count == 2 {
                     expectedContentLength = Int(parts[1].trimmingCharacters(in: .whitespaces)) ?? 0
                 }
+            } else if lower.hasPrefix("content-type:") {
+                let parts = line.split(separator: ":", maxSplits: 1)
+                if parts.count == 2 {
+                    contentType = parts[1].trimmingCharacters(in: .whitespaces)
+                }
+            } else if lower.hasPrefix("authorization:") {
+                let parts = line.split(separator: ":", maxSplits: 1)
+                if parts.count == 2 {
+                    let val = parts[1].trimmingCharacters(in: .whitespaces)
+                    if val.lowercased().hasPrefix("bearer ") {
+                        authorizationHeader = String(val.dropFirst(7)).trimmingCharacters(in: .whitespaces)
+                    } else {
+                        authorizationHeader = val
+                    }
+                }
+            } else if lower.hasPrefix("x-filename:") {
+                let parts = line.split(separator: ":", maxSplits: 1)
+                if parts.count == 2 {
+                    let rawName = parts[1].trimmingCharacters(in: .whitespaces)
+                    xFilenameHeader = rawName.removingPercentEncoding ?? rawName
+                }
             }
         }
 
-        // Wait until full body is received
-        let bodyBytesCount = bodyPart.utf8.count
-        guard bodyBytesCount >= expectedContentLength else {
+        let bodyStartIndex = headerDelimiterRange.upperBound
+        let availableBodyBytes = accumulated.endIndex - bodyStartIndex
+        guard availableBodyBytes >= expectedContentLength else {
+            // Still waiting for full body payload
             return
         }
 
+        let bodyEndIndex = bodyStartIndex + expectedContentLength
+        let bodyData = accumulated[bodyStartIndex..<bodyEndIndex]
+
         lock.lock()
-        connectionBuffers.removeValue(forKey: id)
+        let remainingBytes = accumulated[bodyEndIndex...]
+        if remainingBytes.isEmpty {
+            connectionBuffers.removeValue(forKey: id)
+        } else {
+            connectionBuffers[id] = Data(remainingBytes)
+        }
         lock.unlock()
 
+        let requestLine = headersPart.components(separatedBy: .newlines).first ?? ""
+
         // HTTP GET /
-        if headersPart.hasPrefix("GET / ") || headersPart.hasPrefix("GET /index.html") {
+        if requestLine.hasPrefix("GET / ") || requestLine.hasPrefix("GET /index.html") {
             let htmlData = Data(MobileWebPortal.htmlContent.utf8)
             sendHTTPResponse(data: htmlData, contentType: "text/html; charset=utf-8", connection: connection, id: id)
             return
         }
 
         // HTTP POST /api/pair
-        if headersPart.hasPrefix("POST /api/pair") {
+        if requestLine.hasPrefix("POST /api/pair") {
+            let bodyPart = String(data: bodyData, encoding: .utf8) ?? ""
             handlePairingRequest(body: bodyPart, connection: connection, id: id)
             return
         }
 
         // HTTP POST /api/clipboard
-        if headersPart.hasPrefix("POST /api/clipboard") {
+        if requestLine.hasPrefix("POST /api/clipboard") {
+            let bodyPart = String(data: bodyData, encoding: .utf8) ?? ""
             handlePostClipboard(body: bodyPart, connection: connection, id: id)
             return
         }
 
         // HTTP GET /api/clipboard
-        if headersPart.hasPrefix("GET /api/clipboard") {
+        if requestLine.hasPrefix("GET /api/clipboard") {
             handleGetClipboard(connection: connection, id: id)
+            return
+        }
+
+        // HTTP POST /api/upload
+        if requestLine.hasPrefix("POST /api/upload") {
+            handleUploadRequest(
+                bodyData: Data(bodyData),
+                contentType: contentType,
+                authToken: authorizationHeader,
+                xFilename: xFilenameHeader,
+                connection: connection,
+                id: id
+            )
             return
         }
 
@@ -237,6 +291,118 @@ public final class AirBridgeServer: @unchecked Sendable {
             connection: connection,
             id: id
         )
+    }
+
+    private func handleUploadRequest(
+        bodyData: Data,
+        contentType: String,
+        authToken: String,
+        xFilename: String?,
+        connection: NWConnection,
+        id: UUID
+    ) {
+        let activeSessions = securityManager.activeSessionsList()
+        if !activeSessions.isEmpty && !securityManager.authorizeToken(authToken) {
+            sendHTTPResponse(
+                data: Data("{\"error\":\"Unauthorized: Invalid or missing token\"}".utf8),
+                statusCode: 403,
+                contentType: "application/json",
+                connection: connection,
+                id: id
+            )
+            return
+        }
+
+        let fallbackName = xFilename ?? "upload_\(Int(Date().timeIntervalSince1970))"
+        guard let upload = MultipartParser.parse(body: bodyData, contentType: contentType, defaultFilename: fallbackName),
+              !upload.data.isEmpty else {
+            sendHTTPResponse(
+                data: Data("{\"error\":\"No file content received\"}".utf8),
+                statusCode: 400,
+                contentType: "application/json",
+                connection: connection,
+                id: id
+            )
+            return
+        }
+
+        let rawName = !upload.filename.isEmpty ? upload.filename : fallbackName
+        let safeFilename = sanitizeFilename(rawName)
+        let destinationURL = getDestinationURL(for: safeFilename)
+
+        do {
+            try upload.data.write(to: destinationURL, options: .atomic)
+            let savedFilename = destinationURL.lastPathComponent
+
+            DispatchQueue.main.async { [weak self] in
+                self?.onFileReceived?(savedFilename, destinationURL)
+            }
+
+            let respJson: [String: Any] = [
+                "status": "ok",
+                "filename": savedFilename,
+                "path": destinationURL.path,
+                "size": upload.data.count
+            ]
+            let respData = (try? JSONSerialization.data(withJSONObject: respJson)) ?? Data("{\"status\":\"ok\"}".utf8)
+            sendHTTPResponse(data: respData, statusCode: 200, contentType: "application/json", connection: connection, id: id)
+        } catch {
+            print("[AirBridgeServer] Failed to save file: \(error)")
+            sendHTTPResponse(
+                data: Data("{\"error\":\"Failed to save file on Mac: \(error.localizedDescription)\"}".utf8),
+                statusCode: 500,
+                contentType: "application/json",
+                connection: connection,
+                id: id
+            )
+        }
+    }
+
+    private func sanitizeFilename(_ filename: String) -> String {
+        var clean = filename.trimmingCharacters(in: .whitespacesAndNewlines)
+        if clean.hasPrefix("\"") && clean.hasSuffix("\"") && clean.count >= 2 {
+            clean = String(clean.dropFirst().dropLast())
+        }
+        let url = URL(fileURLWithPath: clean)
+        var name = url.lastPathComponent
+        name = name.replacingOccurrences(of: "/", with: "_")
+        name = name.replacingOccurrences(of: "\\", with: "_")
+        name = name.replacingOccurrences(of: "..", with: "_")
+        name = name.replacingOccurrences(of: "\0", with: "")
+        if name.isEmpty || name == "." || name == ".." {
+            name = "upload_\(Int(Date().timeIntervalSince1970))"
+        }
+        return name
+    }
+
+    private func getDestinationURL(for filename: String) -> URL {
+        let baseDir: URL
+        if let custom = customDownloadDirectory {
+            baseDir = custom
+        } else if let downloads = FileManager.default.urls(for: .downloadsDirectory, in: .userDomainMask).first {
+            baseDir = downloads
+        } else {
+            baseDir = URL(fileURLWithPath: NSHomeDirectory()).appendingPathComponent("Downloads")
+        }
+
+        try? FileManager.default.createDirectory(at: baseDir, withIntermediateDirectories: true)
+
+        let targetURL = baseDir.appendingPathComponent(filename)
+        if !FileManager.default.fileExists(atPath: targetURL.path) {
+            return targetURL
+        }
+
+        let ext = targetURL.pathExtension
+        let baseName = targetURL.deletingPathExtension().lastPathComponent
+        var counter = 1
+        while true {
+            let candidateName = ext.isEmpty ? "\(baseName) (\(counter))" : "\(baseName) (\(counter)).\(ext)"
+            let candidateURL = baseDir.appendingPathComponent(candidateName)
+            if !FileManager.default.fileExists(atPath: candidateURL.path) {
+                return candidateURL
+            }
+            counter += 1
+        }
     }
 
     private func handlePairingRequest(body: String, connection: NWConnection, id: UUID) {
