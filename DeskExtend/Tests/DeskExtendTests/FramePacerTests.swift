@@ -66,4 +66,31 @@ final class FramePacerTests: XCTestCase {
             XCTAssertThrowsError(try parser.append(bytes))
         }
     }
+
+    func testFramePacerRecoversFromDroppedAckViaTimeout() {
+        var pacer = FramePacer(requiresAcknowledgement: true, ackTimeoutSeconds: 0.5)
+        let t0: CFAbsoluteTime = 1000.0
+
+        // 1. First frame is offered and sent
+        XCTAssertEqual(pacer.offer(Data([1]), now: t0), Data([1]))
+        XCTAssertNil(pacer.sent(now: t0 + 0.01))
+
+        // 2. Client dropped ACK; frames offered during the wait are held
+        XCTAssertNil(pacer.offer(Data([2]), now: t0 + 0.1))
+        XCTAssertNil(pacer.offer(Data([3]), now: t0 + 0.2))
+
+        // 3. Before timeout (0.4s), pacer remains waiting for ACK
+        XCTAssertNil(pacer.offer(Data([4]), now: t0 + 0.4))
+
+        // 4. After timeout (0.6s > 0.5s), offer breaks the deadlock and delivers the newest frame
+        XCTAssertEqual(pacer.offer(Data([5]), now: t0 + 0.6), Data([5]))
+    }
+
+    func testPongControlFrameIsDecoded() throws {
+        var parser = ReceiverControlParser()
+        let pong = Data([0x8A, 0x80, 0x12, 0x34, 0x56, 0x78])
+        let messages = try parser.append(pong)
+        XCTAssertEqual(messages.count, 1)
+        XCTAssertEqual(messages[0].opcode, 10)
+    }
 }

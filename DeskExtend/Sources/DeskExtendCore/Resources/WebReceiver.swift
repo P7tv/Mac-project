@@ -139,17 +139,37 @@ public struct WebReceiver {
           if (e.key === 'f' || e.key === 'F') enterFullscreen();
         });
 
+        let activeWs = null;
+        let reconnectTimeout = null;
+
         function connect() {
+          if (reconnectTimeout) {
+            clearTimeout(reconnectTimeout);
+            reconnectTimeout = null;
+          }
+          if (activeWs && (activeWs.readyState === WebSocket.OPEN || activeWs.readyState === WebSocket.CONNECTING)) {
+            return;
+          }
+
           statusDot.className = 'dot connecting';
           const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
           const ws = new WebSocket(`${proto}//${location.host}/stream`, 'deskextend-v1');
+          activeWs = ws;
           ws.binaryType = 'arraybuffer';
           let latestFrame = null;
           let decoding = false;
+          let keepAliveTimer = null;
 
           ws.onopen = () => {
+            if (activeWs !== ws) return;
             statusDot.className = 'dot';
             resetHudTimer();
+            // Periodic keep-alive ensures NAT and Wi-Fi radios stay active during static display periods
+            keepAliveTimer = setInterval(() => {
+              if (ws.readyState === WebSocket.OPEN && ws.protocol === 'deskextend-v1') {
+                try { ws.send(new Uint8Array([1])); } catch (_) {}
+              }
+            }, 3000);
           };
 
           async function renderLatestFrame() {
@@ -167,7 +187,7 @@ public struct WebReceiver {
           }
 
           ws.onmessage = (event) => {
-            // Older frames waiting for decode are replaced by the newest one.
+            if (activeWs !== ws) return;
             latestFrame = event.data;
             void renderLatestFrame();
           };
@@ -205,22 +225,44 @@ public struct WebReceiver {
             } catch (err) {
               // Frame decode error skip
             } finally {
-              // Release the next frame only after this receiver has consumed it.
+              // Release next frame
               if (ws.readyState === WebSocket.OPEN && ws.protocol === 'deskextend-v1') {
-                ws.send(new Uint8Array([1]));
+                try { ws.send(new Uint8Array([1])); } catch (_) {}
               }
             }
           }
 
-          ws.onclose = () => {
+          function scheduleReconnect() {
+            if (keepAliveTimer) { clearInterval(keepAliveTimer); keepAliveTimer = null; }
+            if (activeWs === ws) activeWs = null;
             latestFrame = null;
             statusDot.className = 'dot connecting';
             fpsCounter.innerText = 'Reconnecting...';
-            setTimeout(connect, 1500);
-          };
+            if (!reconnectTimeout) {
+              reconnectTimeout = setTimeout(connect, 1000);
+            }
+          }
 
-          ws.onerror = () => ws.close();
+          ws.onclose = scheduleReconnect;
+          ws.onerror = () => {
+            try { ws.close(); } catch (_) {}
+            scheduleReconnect();
+          };
         }
+
+        document.addEventListener('visibilitychange', () => {
+          if (document.visibilityState === 'visible') {
+            if (!activeWs || activeWs.readyState !== WebSocket.OPEN) {
+              connect();
+            }
+          }
+        });
+
+        window.addEventListener('online', () => {
+          if (!activeWs || activeWs.readyState !== WebSocket.OPEN) {
+            connect();
+          }
+        });
 
         connect();
       </script>

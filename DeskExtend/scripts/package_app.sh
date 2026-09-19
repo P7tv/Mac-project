@@ -28,5 +28,8 @@ fi
 echo "🔐 Ad-hoc code signing..."
 codesign --force --deep --sign - "$BUNDLE_DIR"
 
-echo "✅ $APP_NAME.app successfully packaged at: $BUNDLE_DIR"
-echo "👉 You can run it via: open '$BUNDLE_DIR' or move it to /Applications"
+echo "🚀 Installing to /Applications/$APP_NAME.app..."
+rm -rf "/Applications/$APP_NAME.app"
+cp -R "$BUNDLE_DIR" "/Applications/$APP_NAME.app"
+
+echo "✅ $APP_NAME.app successfully packaged and installed to /Applications/$APP_NAME.app"

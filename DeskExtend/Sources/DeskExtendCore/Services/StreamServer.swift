@@ -9,6 +9,7 @@ public final class StreamServer: @unchecked Sendable {
     private var webSocketConnections: Set<UUID> = []
     private var framePacers: [UUID: FramePacer] = [:]
     private var receiverParsers: [UUID: ReceiverControlParser] = [:]
+    private var heartbeatTimer: DispatchSourceTimer?
     private let queue = DispatchQueue(label: "com.deskextend.streamserver", qos: .userInteractive)
     private let lock = NSLock()
 
@@ -30,6 +31,10 @@ public final class StreamServer: @unchecked Sendable {
 
         let tcp = NWProtocolTCP.Options()
         tcp.noDelay = true
+        tcp.enableKeepalive = true
+        tcp.keepaliveIdle = 5
+        tcp.keepaliveInterval = 2
+        tcp.keepaliveCount = 3
         let params = NWParameters(tls: nil, tcp: tcp)
         params.allowLocalEndpointReuse = true
 
@@ -56,6 +61,7 @@ public final class StreamServer: @unchecked Sendable {
         }
 
         listener.start(queue: queue)
+        startHeartbeat()
         isRunning = true
     }
 
@@ -64,6 +70,8 @@ public final class StreamServer: @unchecked Sendable {
         defer { lock.unlock() }
 
         isRunning = false
+        heartbeatTimer?.cancel()
+        heartbeatTimer = nil
         listener?.cancel()
         listener = nil
 
@@ -246,6 +254,39 @@ public final class StreamServer: @unchecked Sendable {
         })
     }
 
+    private func startHeartbeat() {
+        let timer = DispatchSource.makeTimerSource(queue: queue)
+        timer.schedule(deadline: .now() + 3.0, repeating: 3.0)
+        timer.setEventHandler { [weak self] in
+            self?.sendHeartbeatPing()
+        }
+        timer.resume()
+        self.heartbeatTimer = timer
+    }
+
+    private func sendHeartbeatPing() {
+        lock.lock()
+        let clients = Array(webSocketConnections)
+        let active = clients.compactMap { id -> (UUID, NWConnection)? in
+            guard let conn = connections[id] else { return nil }
+            return (id, conn)
+        }
+        lock.unlock()
+
+        guard !active.isEmpty else { return }
+
+        // RFC 6455 Ping Frame: FIN (0x80) + Opcode 9 (0x09) = 0x89, length 0 (0x00)
+        let pingPacket = Data([0x89, 0x00])
+        for (id, connection) in active {
+            connection.send(content: pingPacket, completion: .contentProcessed { [weak self] error in
+                if error != nil {
+                    connection.cancel()
+                    self?.removeConnection(id: id)
+                }
+            })
+        }
+    }
+
     private func handleReceiverControl(_ data: Data, connection: NWConnection, id: UUID) {
         let messages: [ReceiverControlParser.Message]
         lock.lock()
@@ -265,6 +306,11 @@ public final class StreamServer: @unchecked Sendable {
                 let next = framePacers[id]?.acknowledge()
                 lock.unlock()
                 if let next { sendFrame(next, to: id) }
+            case 1 where message.payload == Data("1".utf8) || message.payload == Data("ack".utf8) || message.payload == Data("ping".utf8):
+                lock.lock()
+                let next = framePacers[id]?.acknowledge()
+                lock.unlock()
+                if let next { sendFrame(next, to: id) }
             case 8:
                 connection.cancel()
                 removeConnection(id: id)
@@ -272,6 +318,9 @@ public final class StreamServer: @unchecked Sendable {
                 var pong = Data([0x8A, UInt8(message.payload.count)])
                 pong.append(message.payload)
                 connection.send(content: pong, completion: .contentProcessed { _ in })
+            case 10:
+                // Client Pong received; connection is healthy
+                break
             default:
                 break
             }
