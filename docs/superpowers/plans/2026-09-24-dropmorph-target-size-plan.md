@@ -30,7 +30,7 @@
   - `ConversionSettings.targetSizeMB: Double`
   - `ConversionSettings.targetSizeBytes: Int64`
 
-- [ ] **Step 1: Write the failing test for `ConversionSettings`**
+- [x] **Step 1: Write the failing test for `ConversionSettings`**
 
 Add in `DropMorph/Tests/DropMorphTests/EngineTests.swift`:
 ```swift
@@ -46,12 +46,12 @@ func testConversionSettingsTargetSizeMode() {
 }
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `swift test --package-path "/Users/panpan/Mac project/DropMorph" --filter testConversionSettingsTargetSizeMode`
 Expected: FAIL due to missing `mode` and `targetSizeMB`.
 
-- [ ] **Step 3: Update `ConversionSettings.swift`**
+- [x] **Step 3: Update `ConversionSettings.swift`**
 
 Modify `DropMorph/Sources/DropMorphCore/Models/ConversionSettings.swift`:
 ```swift
@@ -97,12 +97,12 @@ public struct ConversionSettings: Sendable {
 }
 ```
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `swift test --package-path "/Users/panpan/Mac project/DropMorph" --filter testConversionSettingsTargetSizeMode`
 Expected: PASS.
 
-- [ ] **Step 5: Commit changes**
+- [x] **Step 5: Commit changes**
 
 ```bash
 git add DropMorph/Sources/DropMorphCore/Models/ConversionSettings.swift DropMorph/Tests/DropMorphTests/EngineTests.swift
@@ -121,7 +121,7 @@ git commit -m "feat(dropmorph): add CompressionMode and targetSizeMB to Conversi
 - Consumes: `ConversionSettings.mode`, `ConversionSettings.targetSizeBytes`, `ConversionSettings.targetFormat`
 - Produces: `ImageConverter.convert` respecting target size when `mode == .targetSize` via in-memory binary search and downscaling fallback.
 
-- [ ] **Step 1: Write failing test for image target size compression**
+- [x] **Step 1: Write failing test for image target size compression**
 
 Add to `DropMorph/Tests/DropMorphTests/EngineTests.swift`:
 ```swift
@@ -138,12 +138,12 @@ func testImageTargetSizeCompressionJPEG() throws {
 }
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `swift test --package-path "/Users/panpan/Mac project/DropMorph" --filter testImageTargetSizeCompressionJPEG`
 Expected: FAIL or size exceeds 200 KB because targetSize is not yet implemented in `ImageConverter`.
 
-- [ ] **Step 3: Implement target size logic in `ImageConverter.swift`**
+- [x] **Step 3: Implement target size logic in `ImageConverter.swift`**
 
 In `DropMorph/Sources/DropMorphCore/Services/ImageConverter.swift`:
 1. Check `settings.mode == .targetSize`:
@@ -156,12 +156,12 @@ In `DropMorph/Sources/DropMorphCore/Services/ImageConverter.swift`:
      - Re-encode at `q = 0.75` with the resized CGImage.
 2. For WebP, pass quality derived from target size or `-size` parameter to `cwebp`.
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `swift test --package-path "/Users/panpan/Mac project/DropMorph" --filter testImageTargetSizeCompressionJPEG`
 Expected: PASS.
 
-- [ ] **Step 5: Commit changes**
+- [x] **Step 5: Commit changes**
 
 ```bash
 git add DropMorph/Sources/DropMorphCore/Services/ImageConverter.swift DropMorph/Tests/DropMorphTests/EngineTests.swift
@@ -180,7 +180,7 @@ git commit -m "feat(dropmorph): implement in-memory binary search target size im
 - Consumes: `ConversionSettings.mode`, `ConversionSettings.targetSizeBytes`
 - Produces: `PDFCompressor.compressPDF` producing output `<= targetSizeBytes`.
 
-- [ ] **Step 1: Write failing test for PDF target size compression**
+- [x] **Step 1: Write failing test for PDF target size compression**
 
 Add to `DropMorph/Tests/DropMorphTests/EngineTests.swift`:
 ```swift
@@ -201,12 +201,12 @@ func testPDFTargetSizeCompression() throws {
 }
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `swift test --package-path "/Users/panpan/Mac project/DropMorph" --filter testPDFTargetSizeCompression`
 Expected: FAIL.
 
-- [ ] **Step 3: Implement target size logic in `PDFCompressor.swift`**
+- [x] **Step 3: Implement target size logic in `PDFCompressor.swift`**
 
 In `PDFCompressor.swift`:
 - When `settings.mode == .targetSize`:
@@ -216,12 +216,12 @@ In `PDFCompressor.swift`:
   - Compile `PDFDocument` and check `dataRepresentation().count`.
   - If still `> settings.targetSizeBytes`, run a quick downscale adjustment pass on rasterized pages.
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `swift test --package-path "/Users/panpan/Mac project/DropMorph" --filter testPDFTargetSizeCompression`
 Expected: PASS.
 
-- [ ] **Step 5: Commit changes**
+- [x] **Step 5: Commit changes**
 
 ```bash
 git add DropMorph/Sources/DropMorphCore/Services/PDFCompressor.swift DropMorph/Tests/DropMorphTests/EngineTests.swift
@@ -241,7 +241,7 @@ git commit -m "feat(dropmorph): implement dynamic budget PDF target size compres
 - Consumes: `ConversionSettings.mode`, `ConversionSettings.targetSizeBytes`
 - Produces: `VideoConverter.calculateTargetBitrate(durationSeconds:targetSizeBytes:) -> (videoBitrate: Int, audioBitrate: Int, targetResolution: CGSize)`
 
-- [ ] **Step 1: Write test for video bitrate calculation**
+- [x] **Step 1: Write test for video bitrate calculation**
 
 Add to `DropMorph/Tests/DropMorphTests/EngineTests.swift`:
 ```swift
@@ -258,21 +258,21 @@ func testVideoTargetBitrateBudgeting() {
 }
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `swift test --package-path "/Users/panpan/Mac project/DropMorph" --filter testVideoTargetBitrateBudgeting`
 Expected: FAIL.
 
-- [ ] **Step 3: Implement bitrate budgeting in `VideoConverter.swift`**
+- [x] **Step 3: Implement bitrate budgeting in `VideoConverter.swift`**
 
 Add helper method `calculateTargetBitrate` and integrate with `AVAssetExportSession` / custom export pipeline for video inputs when target format is video or converted to GIF.
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `swift test --package-path "/Users/panpan/Mac project/DropMorph" --filter testVideoTargetBitrateBudgeting`
 Expected: PASS.
 
-- [ ] **Step 5: Commit changes**
+- [x] **Step 5: Commit changes**
 
 ```bash
 git add DropMorph/Sources/DropMorphCore/Services/VideoConverter.swift DropMorph/Sources/DropMorphCore/ViewModels/ConversionViewModel.swift DropMorph/Tests/DropMorphTests/EngineTests.swift
@@ -292,7 +292,7 @@ git commit -m "feat(dropmorph): add dynamic bitrate budgeting for video target s
 - Preset chips: `1 MB`, `2 MB`, `5 MB`, `10 MB`, `25 MB`
 - Stepper / custom text input for arbitrary decimal MB values
 
-- [ ] **Step 1: Update `SettingsBarView.swift` with Mode Switcher & Target Size Controls**
+- [x] **Step 1: Update `SettingsBarView.swift` with Mode Switcher & Target Size Controls**
 
 Add:
 - Capsule button picker for `viewModel.settings.mode` (`.quality` vs `.targetSize`).
@@ -301,16 +301,16 @@ Add:
   - Preset chips (`1 MB`, `2 MB`, `5 MB`, `10 MB`, `25 MB`) with active highlight state.
   - Stepper & decimal text field `[ 2.0 ] MB` with formatted number display.
 
-- [ ] **Step 2: Update `QueueItemRowView.swift`**
+- [x] **Step 2: Update `QueueItemRowView.swift`**
 
 Display target MB badge if item is processed in target size mode (e.g. `≤ 2.0 MB`).
 
-- [ ] **Step 3: Test UI compilation**
+- [x] **Step 3: Test UI compilation**
 
 Run: `swift build --package-path "/Users/panpan/Mac project/DropMorph"`
 Expected: Build succeeds with 0 errors.
 
-- [ ] **Step 4: Commit changes**
+- [x] **Step 4: Commit changes**
 
 ```bash
 git add DropMorph/Sources/DropMorphCore/Views/SettingsBarView.swift DropMorph/Sources/DropMorphCore/Views/QueueItemRowView.swift
@@ -325,20 +325,20 @@ git commit -m "feat(dropmorph): add Mode Switcher and Target Size preset chips t
 - Test: All tests in `DropMorphTests`
 - Target: `/Applications/DropMorph.app`
 
-- [ ] **Step 1: Run all unit tests**
+- [x] **Step 1: Run all unit tests**
 
 Run: `swift test --package-path "/Users/panpan/Mac project/DropMorph"`
 Expected: All tests pass cleanly.
 
-- [ ] **Step 2: Build release application and bundle**
+- [x] **Step 2: Build release application and bundle**
 
 Run: `cd "/Users/panpan/Mac project/DropMorph" && ./scripts/package_app.sh`
 
-- [ ] **Step 3: Install updated app to `/Applications/DropMorph.app`**
+- [x] **Step 3: Install updated app to `/Applications/DropMorph.app`**
 
 Ensure `/Applications/DropMorph.app` is updated with the new binary and resources.
 
-- [ ] **Step 4: Commit final release updates**
+- [x] **Step 4: Commit final release updates**
 
 ```bash
 git add .
