@@ -229,4 +229,20 @@ final class EngineTests: XCTestCase {
         let size = (try? FileManager.default.attributesOfItem(atPath: compressedURL.path)[.size] as? Int64) ?? 0
         XCTAssertGreaterThan(size, 0)
     }
+
+    func testPDFTargetSizeCompression() throws {
+        let page1 = createComplexTestImage(width: 600, height: 600)
+        let page2 = createComplexTestImage(width: 600, height: 600)
+        let originalPDF = tempDirectory.appendingPathComponent("multi_page.pdf")
+        _ = try PDFMerger.mergeToPDF(imageURLs: [page1, page2], outputURL: originalPDF, quality: 1.0)
+
+        let targetMB = 0.12 // 120 KB
+        let settings = ConversionSettings(targetFormat: .pdf, mode: .targetSize, targetSizeMB: targetMB)
+
+        let compressedURL = try PDFCompressor.compressPDF(inputURL: originalPDF, settings: settings)
+        let size = (try? FileManager.default.attributesOfItem(atPath: compressedURL.path)[.size] as? Int64) ?? 0
+
+        XCTAssertTrue(size > 0)
+        XCTAssertLessThanOrEqual(size, settings.targetSizeBytes + 4096)
+    }
 }
