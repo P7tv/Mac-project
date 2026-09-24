@@ -245,4 +245,18 @@ final class EngineTests: XCTestCase {
         XCTAssertTrue(size > 0)
         XCTAssertLessThanOrEqual(size, settings.targetSizeBytes + 4096)
     }
+
+    func testVideoTargetBitrateBudgeting() {
+        let duration: Double = 60.0 // 1 minute video
+        let targetMB = 10.0 // 10 MB
+        let targetBytes = Int64(targetMB * 1024 * 1024)
+
+        let budget = VideoConverter.calculateTargetBitrate(durationSeconds: duration, targetSizeBytes: targetBytes)
+
+        XCTAssertGreaterThan(budget.videoBitrate, 500_000)
+        XCTAssertLessThanOrEqual(budget.videoBitrate, 2_000_000)
+        XCTAssertEqual(budget.audioBitrate, 96_000)
+        XCTAssertEqual(budget.targetResolution.width, 1280)
+        XCTAssertEqual(budget.targetResolution.height, 720)
+    }
 }
