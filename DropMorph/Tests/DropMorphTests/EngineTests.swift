@@ -46,6 +46,17 @@ final class EngineTests: XCTestCase {
         return fileURL
     }
 
+    func testConversionSettingsTargetSizeMode() {
+        var settings = ConversionSettings()
+        XCTAssertEqual(settings.mode, .quality)
+        XCTAssertEqual(settings.targetSizeMB, 2.0)
+        XCTAssertEqual(settings.targetSizeBytes, 2 * 1024 * 1024)
+        
+        settings.mode = .targetSize
+        settings.targetSizeMB = 0.5
+        XCTAssertEqual(settings.targetSizeBytes, Int64(0.5 * 1024 * 1024))
+    }
+
     func testConvertPNGToWebP() throws {
         let inputURL = createTestImage(width: 400, height: 400, format: "png")
         let settings = ConversionSettings(targetFormat: .webp, quality: 0.8)

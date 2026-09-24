@@ -31,22 +31,39 @@ public enum ResizePreset: String, CaseIterable, Identifiable, Sendable {
     }
 }
 
+public enum CompressionMode: String, CaseIterable, Identifiable, Sendable {
+    case quality = "Quality"
+    case targetSize = "Target Size"
+
+    public var id: String { rawValue }
+}
+
 public struct ConversionSettings: Sendable {
     public var targetFormat: OutputFormat
+    public var mode: CompressionMode
     public var quality: Double // 0.1 to 1.0
+    public var targetSizeMB: Double // e.g. 1.0, 2.0, 5.0, 25.0
     public var resizePreset: ResizePreset
     public var stripMetadata: Bool
     public var customOutputFolder: URL?
 
+    public var targetSizeBytes: Int64 {
+        Int64(max(0.05, targetSizeMB) * 1024 * 1024)
+    }
+
     public init(
         targetFormat: OutputFormat = .webp,
+        mode: CompressionMode = .quality,
         quality: Double = 0.8,
+        targetSizeMB: Double = 2.0,
         resizePreset: ResizePreset = .original,
         stripMetadata: Bool = true,
         customOutputFolder: URL? = nil
     ) {
         self.targetFormat = targetFormat
+        self.mode = mode
         self.quality = quality
+        self.targetSizeMB = targetSizeMB
         self.resizePreset = resizePreset
         self.stripMetadata = stripMetadata
         self.customOutputFolder = customOutputFolder
