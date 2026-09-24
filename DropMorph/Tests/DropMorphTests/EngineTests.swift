@@ -46,6 +46,39 @@ final class EngineTests: XCTestCase {
         return fileURL
     }
 
+    private func createComplexTestImage(width: Int = 1000, height: Int = 1000) -> URL {
+        let fileURL = tempDirectory.appendingPathComponent("complex_\(UUID().uuidString).png")
+        let colorSpace = CGColorSpaceCreateDeviceRGB()
+        let bitmapInfo = CGBitmapInfo(rawValue: CGImageAlphaInfo.premultipliedLast.rawValue)
+        let context = CGContext(
+            data: nil,
+            width: width,
+            height: height,
+            bitsPerComponent: 8,
+            bytesPerRow: width * 4,
+            space: colorSpace,
+            bitmapInfo: bitmapInfo.rawValue
+        )!
+
+        // Draw intricate grid with high entropy
+        for x in stride(from: 0, to: width, by: 10) {
+            for y in stride(from: 0, to: height, by: 10) {
+                let r = CGFloat((x * 17) % 256) / 255.0
+                let g = CGFloat((y * 31) % 256) / 255.0
+                let b = CGFloat(((x + y) * 13) % 256) / 255.0
+                context.setFillColor(CGColor(red: r, green: g, blue: b, alpha: 1.0))
+                context.fill(CGRect(x: x, y: y, width: 10, height: 10))
+            }
+        }
+
+        let cgImage = context.makeImage()!
+        let dest = CGImageDestinationCreateWithURL(fileURL as CFURL, UTType.png.identifier as CFString, 1, nil)!
+        CGImageDestinationAddImage(dest, cgImage, nil)
+        CGImageDestinationFinalize(dest)
+
+        return fileURL
+    }
+
     func testConversionSettingsTargetSizeMode() {
         var settings = ConversionSettings()
         XCTAssertEqual(settings.mode, .quality)
@@ -55,6 +88,30 @@ final class EngineTests: XCTestCase {
         settings.mode = .targetSize
         settings.targetSizeMB = 0.5
         XCTAssertEqual(settings.targetSizeBytes, Int64(0.5 * 1024 * 1024))
+    }
+
+    func testImageTargetSizeCompressionJPEG() throws {
+        let inputURL = createComplexTestImage(width: 800, height: 800)
+        let targetMB = 0.08 // 80 KB
+        let settings = ConversionSettings(targetFormat: .jpeg, mode: .targetSize, targetSizeMB: targetMB)
+
+        let outputURL = try ImageConverter.convert(inputURL: inputURL, settings: settings)
+        let fileSize = (try FileManager.default.attributesOfItem(atPath: outputURL.path)[.size] as? Int64) ?? 0
+
+        XCTAssertTrue(fileSize > 0)
+        XCTAssertLessThanOrEqual(fileSize, settings.targetSizeBytes + 2048)
+    }
+
+    func testImageTargetSizeCompressionWebP() throws {
+        let inputURL = createComplexTestImage(width: 800, height: 800)
+        let targetMB = 0.1 // 100 KB
+        let settings = ConversionSettings(targetFormat: .webp, mode: .targetSize, targetSizeMB: targetMB)
+
+        let outputURL = try ImageConverter.convert(inputURL: inputURL, settings: settings)
+        let fileSize = (try FileManager.default.attributesOfItem(atPath: outputURL.path)[.size] as? Int64) ?? 0
+
+        XCTAssertTrue(fileSize > 0)
+        XCTAssertLessThanOrEqual(fileSize, settings.targetSizeBytes + 4096)
     }
 
     func testConvertPNGToWebP() throws {

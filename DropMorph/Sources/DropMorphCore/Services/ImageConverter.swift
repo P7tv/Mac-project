@@ -122,9 +122,24 @@ public struct ImageConverter: Sendable {
             throw ImageConverterError.cannotCreateDestination(finalOutputURL)
         }
 
+        var effectiveImage = cgImage
+        var effectiveQuality: Double? = (settings.targetFormat == .jpeg || settings.targetFormat == .heic) ? settings.quality : nil
+
+        if settings.mode == .targetSize {
+            let optimized = optimizeForTargetSize(
+                cgImage: cgImage,
+                format: settings.targetFormat,
+                targetBytes: settings.targetSizeBytes,
+                stripMetadata: settings.stripMetadata,
+                sourceProperties: sourceProperties
+            )
+            effectiveImage = optimized.image
+            effectiveQuality = optimized.quality
+        }
+
         var destinationProperties: [CFString: Any] = [:]
-        if settings.targetFormat == .jpeg || settings.targetFormat == .heic {
-            destinationProperties[kCGImageDestinationLossyCompressionQuality] = settings.quality
+        if let q = effectiveQuality {
+            destinationProperties[kCGImageDestinationLossyCompressionQuality] = q
         }
 
         if !settings.stripMetadata, let props = sourceProperties {
@@ -136,13 +151,134 @@ public struct ImageConverter: Sendable {
             }
         }
 
-        CGImageDestinationAddImage(destination, cgImage, destinationProperties as CFDictionary)
+        CGImageDestinationAddImage(destination, effectiveImage, destinationProperties as CFDictionary)
 
         guard CGImageDestinationFinalize(destination) else {
             throw ImageConverterError.finalizeFailed(finalOutputURL)
         }
 
         return finalOutputURL
+    }
+
+    private static func resizeCGImage(_ image: CGImage, targetWidth: Int, targetHeight: Int) -> CGImage? {
+        let colorSpace = image.colorSpace ?? CGColorSpaceCreateDeviceRGB()
+        guard let context = CGContext(
+            data: nil,
+            width: targetWidth,
+            height: targetHeight,
+            bitsPerComponent: 8,
+            bytesPerRow: targetWidth * 4,
+            space: colorSpace,
+            bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+        ) else {
+            return nil
+        }
+        context.interpolationQuality = .high
+        context.draw(image, in: CGRect(x: 0, y: 0, width: targetWidth, height: targetHeight))
+        return context.makeImage()
+    }
+
+    private static func encodeInMemory(
+        cgImage: CGImage,
+        format: OutputFormat,
+        quality: Double?,
+        stripMetadata: Bool,
+        sourceProperties: [CFString: Any]?
+    ) -> Data? {
+        let data = NSMutableData()
+        guard let dest = CGImageDestinationCreateWithData(data as CFMutableData, format.utType.identifier as CFString, 1, nil) else {
+            return nil
+        }
+        var props: [CFString: Any] = [:]
+        if let q = quality, (format == .jpeg || format == .heic) {
+            props[kCGImageDestinationLossyCompressionQuality] = q
+        }
+        if !stripMetadata, let src = sourceProperties {
+            if let exif = src[kCGImagePropertyExifDictionary] {
+                props[kCGImagePropertyExifDictionary] = exif
+            }
+            if let tiff = src[kCGImagePropertyTIFFDictionary] {
+                props[kCGImagePropertyTIFFDictionary] = tiff
+            }
+        }
+        CGImageDestinationAddImage(dest, cgImage, props as CFDictionary)
+        guard CGImageDestinationFinalize(dest) else { return nil }
+        return data as Data
+    }
+
+    private static func optimizeForTargetSize(
+        cgImage: CGImage,
+        format: OutputFormat,
+        targetBytes: Int64,
+        stripMetadata: Bool,
+        sourceProperties: [CFString: Any]?
+    ) -> (image: CGImage, quality: Double?) {
+        let isLossy = (format == .jpeg || format == .heic)
+
+        if !isLossy {
+            var current = cgImage
+            var iterations = 0
+            while iterations < 5 {
+                guard let data = encodeInMemory(cgImage: current, format: format, quality: nil, stripMetadata: stripMetadata, sourceProperties: sourceProperties) else { break }
+                if Int64(data.count) <= targetBytes { break }
+                let ratio = sqrt(Double(targetBytes) / Double(data.count)) * 0.92
+                let newW = max(16, Int(CGFloat(current.width) * CGFloat(ratio)))
+                let newH = max(16, Int(CGFloat(current.height) * CGFloat(ratio)))
+                guard let resized = resizeCGImage(current, targetWidth: newW, targetHeight: newH) else { break }
+                current = resized
+                iterations += 1
+            }
+            return (current, nil)
+        }
+
+        // Lossy format (JPEG, HEIC)
+        // 1. Check if high quality (0.92) is already <= targetBytes
+        if let highData = encodeInMemory(cgImage: cgImage, format: format, quality: 0.92, stripMetadata: stripMetadata, sourceProperties: sourceProperties),
+           Int64(highData.count) <= targetBytes {
+            return (cgImage, 0.92)
+        }
+
+        // 2. Binary search on quality in [0.05, 0.90]
+        var low: Double = 0.05
+        var high: Double = 0.90
+        var bestQuality: Double = 0.05
+        var fitsWithinTarget = false
+
+        for _ in 0..<5 {
+            let mid = (low + high) / 2.0
+            if let data = encodeInMemory(cgImage: cgImage, format: format, quality: mid, stripMetadata: stripMetadata, sourceProperties: sourceProperties) {
+                if Int64(data.count) <= targetBytes {
+                    bestQuality = mid
+                    fitsWithinTarget = true
+                    low = mid + 0.01
+                } else {
+                    high = mid - 0.01
+                }
+            }
+        }
+
+        if fitsWithinTarget {
+            return (cgImage, bestQuality)
+        }
+
+        // 3. Fallback: Even at lowest quality (0.05), file exceeds targetBytes. Downscale dimensions.
+        var current = cgImage
+        let currentQ = 0.65
+        var iterations = 0
+        while iterations < 4 {
+            guard let data = encodeInMemory(cgImage: current, format: format, quality: currentQ, stripMetadata: stripMetadata, sourceProperties: sourceProperties) else { break }
+            if Int64(data.count) <= targetBytes {
+                return (current, currentQ)
+            }
+            let ratio = max(0.15, sqrt(Double(targetBytes) / Double(data.count)) * 0.90)
+            let newW = max(16, Int(CGFloat(current.width) * CGFloat(ratio)))
+            let newH = max(16, Int(CGFloat(current.height) * CGFloat(ratio)))
+            guard let resized = resizeCGImage(current, targetWidth: newW, targetHeight: newH) else { break }
+            current = resized
+            iterations += 1
+        }
+
+        return (current, currentQ)
     }
 
     private static func renderSVGToCGImage(nsImage: NSImage, size: CGSize) -> CGImage? {
@@ -201,8 +337,13 @@ public struct ImageConverter: Sendable {
         _ = try convert(inputURL: inputURL, settings: intermediateSettings, targetOutputURL: tempPNGURL)
 
         // Step B: Run cwebp
-        let qualityInt = max(1, min(100, Int(round(settings.quality * 100))))
-        var arguments = ["-q", "\(qualityInt)", tempPNGURL.path, "-o", finalOutputURL.path]
+        var arguments: [String] = []
+        if settings.mode == .targetSize {
+            arguments = ["-size", "\(settings.targetSizeBytes)", tempPNGURL.path, "-o", finalOutputURL.path]
+        } else {
+            let qualityInt = max(1, min(100, Int(round(settings.quality * 100))))
+            arguments = ["-q", "\(qualityInt)", tempPNGURL.path, "-o", finalOutputURL.path]
+        }
         if settings.stripMetadata {
             arguments.append("-metadata")
             arguments.append("none")
