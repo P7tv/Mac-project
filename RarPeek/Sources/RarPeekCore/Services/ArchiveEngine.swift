@@ -205,14 +205,16 @@ public struct ArchiveEngine: Sendable {
         let stderrData = stderrPipe.fileHandleForReading.readDataToEndOfFile()
 
         if proc.terminationStatus != 0 {
-            let errMsg = String(data: stderrData, encoding: .utf8) ?? "unar exited with code \(proc.terminationStatus)"
-            if errMsg.lowercased().contains("password") {
+            let stderrStr = String(data: stderrData, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            let stdoutStr = String(data: stdoutData, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            let fullOutput = !stderrStr.isEmpty ? stderrStr : stdoutStr
+            let lower = fullOutput.lowercased()
+
+            if lower.contains("password") || lower.contains("error on decrunching") || lower.contains("checksum error") {
                 throw ArchiveEngineError.invalidPassword
             }
-            throw ArchiveEngineError.extractionFailed(errMsg)
+            throw ArchiveEngineError.extractionFailed(fullOutput.isEmpty ? "Extraction process failed with code \(proc.terminationStatus)." : fullOutput)
         }
-
-        _ = stdoutData
 
         // Output directory is targetDir
         return targetDir
