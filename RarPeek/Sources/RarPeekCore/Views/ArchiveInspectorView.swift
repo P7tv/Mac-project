@@ -31,6 +31,9 @@ public struct ArchiveInspectorView: View {
         .sheet(isPresented: $viewModel.isShowingPasswordPrompt) {
             PasswordPromptView(viewModel: viewModel)
         }
+        .sheet(isPresented: $viewModel.isShowingRecoverySheet) {
+            PasswordRecoverySheet(archiveViewModel: viewModel)
+        }
     }
 
     private var headerBar: some View {
@@ -65,17 +68,27 @@ public struct ArchiveInspectorView: View {
                     }
 
                     if viewModel.currentArchive?.isEncrypted == true {
-                        HStack(spacing: 3) {
-                            Image(systemName: "lock.fill")
-                                .font(.system(size: 8))
-                            Text("ENCRYPTED")
-                                .font(.system(size: 9, weight: .bold))
+                        Button {
+                            if viewModel.passwordInput.isEmpty {
+                                viewModel.isShowingPasswordPrompt = true
+                            } else {
+                                viewModel.isShowingRecoverySheet = true
+                            }
+                        } label: {
+                            HStack(spacing: 3) {
+                                Image(systemName: viewModel.passwordInput.isEmpty ? "lock.fill" : "lock.open.fill")
+                                    .font(.system(size: 8))
+                                Text(viewModel.passwordInput.isEmpty ? "ENCRYPTED" : "UNLOCKED")
+                                    .font(.system(size: 9, weight: .bold))
+                            }
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 2)
+                            .background(viewModel.passwordInput.isEmpty ? Color.orange.opacity(0.15) : Color.green.opacity(0.15))
+                            .foregroundColor(viewModel.passwordInput.isEmpty ? .orange : .green)
+                            .clipShape(Capsule())
                         }
-                        .padding(.horizontal, 6)
-                        .padding(.vertical, 2)
-                        .background(Color.orange.opacity(0.15))
-                        .foregroundColor(.orange)
-                        .clipShape(Capsule())
+                        .buttonStyle(.plain)
+                        .help("Click to enter password or launch Recovery Assistant")
                     }
                 }
 

@@ -66,6 +66,22 @@ public struct PasswordPromptView: View {
                 .keyboardShortcut(.defaultAction)
                 .disabled(password.isEmpty)
             }
+
+            Divider()
+
+            Button {
+                viewModel.isShowingPasswordPrompt = false
+                viewModel.isShowingRecoverySheet = true
+            } label: {
+                HStack(spacing: 5) {
+                    Image(systemName: "bolt.shield.fill")
+                        .foregroundColor(.orange)
+                    Text("Forgot Password? Use Recovery")
+                        .font(.system(size: 11, weight: .medium))
+                        .foregroundColor(.orange)
+                }
+            }
+            .buttonStyle(.plain)
         }
         .padding(24)
         .frame(width: 340)
