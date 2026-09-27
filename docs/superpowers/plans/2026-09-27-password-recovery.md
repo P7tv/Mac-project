@@ -48,11 +48,11 @@
   public final class PasswordRecoveryEngine: @unchecked Sendable { ... }
   ```
 
-- [ ] **Step 1: Write the failing unit tests for `PasswordRecoveryEngine`**
-- [ ] **Step 2: Run test to verify it fails**
-- [ ] **Step 3: Implement `PasswordRecoveryEngine.swift`**
-- [ ] **Step 4: Run unit tests to verify they pass**
-- [ ] **Step 5: Commit changes**
+- [x] **Step 1: Write the failing unit tests for `PasswordRecoveryEngine`**
+- [x] **Step 2: Run test to verify it fails**
+- [x] **Step 3: Implement `PasswordRecoveryEngine.swift`**
+- [x] **Step 4: Run unit tests to verify they pass**
+- [x] **Step 5: Commit changes**
 
 ---
 
@@ -85,10 +85,10 @@
   }
   ```
 
-- [ ] **Step 1: Write `PasswordRecoveryViewModel.swift`**
-- [ ] **Step 2: Connect `ArchiveViewModel` to show `isShowingRecoverySheet` and receive `foundPassword`**
-- [ ] **Step 3: Run unit tests to verify compilation and behavior**
-- [ ] **Step 4: Commit changes**
+- [x] **Step 1: Write `PasswordRecoveryViewModel.swift`**
+- [x] **Step 2: Connect `ArchiveViewModel` to show `isShowingRecoverySheet` and receive `foundPassword`**
+- [x] **Step 3: Run unit tests to verify compilation and behavior**
+- [x] **Step 4: Commit changes**
 
 ---
 
@@ -99,11 +99,11 @@
 - Modify: `RarPeek/Sources/RarPeekCore/Views/PasswordPromptView.swift`
 - Modify: `RarPeek/Sources/RarPeekCore/Views/ArchiveInspectorView.swift`
 
-- [ ] **Step 1: Create `PasswordRecoverySheet.swift` with mode selector, progress gauge, candidate ticker, and found alert**
-- [ ] **Step 2: Add "⚡ Recover Password" button to `PasswordPromptView.swift`**
-- [ ] **Step 3: Add recovery sheet presentation and toolbar button to `ArchiveInspectorView.swift`**
-- [ ] **Step 4: Test build and UI rendering**
-- [ ] **Step 5: Commit changes**
+- [x] **Step 1: Create `PasswordRecoverySheet.swift` with mode selector, progress gauge, candidate ticker, and found alert**
+- [x] **Step 2: Add "⚡ Recover Password" button to `PasswordPromptView.swift`**
+- [x] **Step 3: Add recovery sheet presentation and toolbar button to `ArchiveInspectorView.swift`**
+- [x] **Step 4: Test build and UI rendering**
+- [x] **Step 5: Commit changes**
 
 ---
 
@@ -113,7 +113,7 @@
 - Build script: `RarPeek/scripts/package_app.sh`
 - Target: `/Applications/RarPeek.app`
 
-- [ ] **Step 1: Run full test suite (`swift test`)**
-- [ ] **Step 2: Run `./scripts/package_app.sh` to package app bundle**
-- [ ] **Step 3: Sync new app bundle to `/Applications/RarPeek.app`**
-- [ ] **Step 4: Verify binary launch and commit final artifacts**
+- [x] **Step 1: Run full test suite (`swift test`)**
+- [x] **Step 2: Run `./scripts/package_app.sh` to package app bundle**
+- [x] **Step 3: Sync new app bundle to `/Applications/RarPeek.app`**
+- [x] **Step 4: Verify binary launch and commit final artifacts**
