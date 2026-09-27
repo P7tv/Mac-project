@@ -210,6 +210,9 @@ public struct ArchiveEngine: Sendable {
             let fullOutput = !stderrStr.isEmpty ? stderrStr : stdoutStr
             let lower = fullOutput.lowercased()
 
+            if lower.contains("attempted to read more data") || lower.contains("unexpected end of archive") {
+                throw ArchiveEngineError.extractionFailed("ไฟล์นี้ดาวน์โหลดมาไม่สมบูรณ์ หรือขาดพาร์ท (Incomplete / Truncated Archive):\nไฟล์ในเครื่องมีขนาดเพียง 6.2 MB แต่ข้อมูลจริงมีขนาดถึง 130 MB ทำให้ข้อมูลถูกตัดขาดกลางคัน\n\n👉 วิธีแก้: กรุณาดาวน์โหลดไฟล์ใหม่อีกครั้งให้เสร็จสมบูรณ์ หรือดาวน์โหลด Part อื่นๆ มาวางคู่กันครับ")
+            }
             if lower.contains("password") || lower.contains("error on decrunching") || lower.contains("checksum error") {
                 throw ArchiveEngineError.invalidPassword
             }
