@@ -28,7 +28,7 @@
 **Interfaces:**
 - Produces: Compilable Swift package with `RarPeek` and `RarPeekCore` targets and `RarPeekTests`.
 
-- [ ] **Step 1: Create `RarPeek/Package.swift`**
+- [x] **Step 1: Create `RarPeek/Package.swift`**
 
 ```swift
 // swift-tools-version: 5.9
@@ -61,20 +61,20 @@ let package = Package(
 )
 ```
 
-- [ ] **Step 2: Copy engine binaries to `RarPeek/Resources/bin/`**
+- [x] **Step 2: Copy engine binaries to `RarPeek/Resources/bin/`**
 
 Copy `/opt/homebrew/bin/unar` and `/opt/homebrew/bin/lsar` into `RarPeek/Resources/bin/` and ensure executable permissions (`chmod +x`).
 
-- [ ] **Step 3: Create `RarPeek/Resources/Info.plist` and `scripts/package_app.sh`**
+- [x] **Step 3: Create `RarPeek/Resources/Info.plist` and `scripts/package_app.sh`**
 
 Setup Info.plist with document type associations for `.rar`, `.7z`, `.zip` and build packaging script.
 
-- [ ] **Step 4: Verify package builds**
+- [x] **Step 4: Verify package builds**
 
 Run: `swift build --package-path "/Users/panpan/Mac project/RarPeek"`
 Expected: Build complete.
 
-- [ ] **Step 5: Commit changes**
+- [x] **Step 5: Commit changes**
 
 ```bash
 git add RarPeek
@@ -97,25 +97,25 @@ git commit -m "feat(rarpeek): scaffold project with bundled unar and lsar binari
   - `struct ArchiveInfo: Identifiable, Sendable` (fileURL, formatName, totalEntries, totalUncompressedBytes, isEncrypted, entries)
   - `struct ExtractionOptions: Sendable` (targetFolder, password, selectedIndexes, overwritePolicy)
 
-- [ ] **Step 1: Write test for Models in `ArchiveModelTests.swift`**
+- [x] **Step 1: Write test for Models in `ArchiveModelTests.swift`**
 
 Test entry size formatting, ratio calculation, and path leaf extraction.
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `swift test --package-path "/Users/panpan/Mac project/RarPeek" --filter ArchiveModelTests`
 Expected: FAIL (models not yet defined).
 
-- [ ] **Step 3: Implement `ArchiveEntry.swift`, `ArchiveInfo.swift`, `ExtractionOptions.swift`**
+- [x] **Step 3: Implement `ArchiveEntry.swift`, `ArchiveInfo.swift`, `ExtractionOptions.swift`**
 
 Implement models with computed properties (`formattedSize`, `compressionRatio`, `filename`).
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `swift test --package-path "/Users/panpan/Mac project/RarPeek" --filter ArchiveModelTests`
 Expected: PASS.
 
-- [ ] **Step 5: Commit changes**
+- [x] **Step 5: Commit changes**
 
 ```bash
 git add RarPeek/Sources/RarPeekCore/Models RarPeek/Tests/RarPeekTests
@@ -135,27 +135,27 @@ git commit -m "feat(rarpeek): implement ArchiveEntry, ArchiveInfo, and Extractio
   - `ArchiveEngine.inspectArchive(url:password:) async throws -> ArchiveInfo`
   - `ArchiveEngine.extractArchive(url:options:onProgress:) async throws -> URL`
 
-- [ ] **Step 1: Write failing integration test in `ArchiveEngineTests.swift`**
+- [x] **Step 1: Write failing integration test in `ArchiveEngineTests.swift`**
 
 Create a test archive using `7zz` / `zip` with known files, test inspection and extraction.
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `swift test --package-path "/Users/panpan/Mac project/RarPeek" --filter ArchiveEngineTests`
 Expected: FAIL.
 
-- [ ] **Step 3: Implement `ArchiveEngine.swift`**
+- [x] **Step 3: Implement `ArchiveEngine.swift`**
 
 - Locate `lsar` and `unar` via bundled path or fallback.
 - Run `lsar -j` subprocess, parse JSON output into `ArchiveInfo` and `ArchiveEntry` array.
 - Run `unar` with `-o`, `-p`, `-r`, and optional `-i` indexes for selective extraction.
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `swift test --package-path "/Users/panpan/Mac project/RarPeek" --filter ArchiveEngineTests`
 Expected: PASS.
 
-- [ ] **Step 5: Commit changes**
+- [x] **Step 5: Commit changes**
 
 ```bash
 git add RarPeek/Sources/RarPeekCore/Services RarPeek/Tests/RarPeekTests
@@ -176,25 +176,25 @@ git commit -m "feat(rarpeek): implement ArchiveEngine with lsar and unar wrapper
   - Published properties: `currentArchive`, `selectedEntryIDs`, `searchFilter`, `isExtracting`, `extractionProgress`, `passwordInput`, `isShowingPasswordPrompt`, `filteredEntries`.
   - Methods: `loadArchive(url:)`, `extractAll()`, `extractSelected()`, `revealExtractedFolder()`.
 
-- [ ] **Step 1: Write test for `ArchiveViewModel`**
+- [x] **Step 1: Write test for `ArchiveViewModel`**
 
 Test search filtering, selection toggles, and state transitions.
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `swift test --package-path "/Users/panpan/Mac project/RarPeek" --filter ArchiveViewModelTests`
 Expected: FAIL.
 
-- [ ] **Step 3: Implement `ArchiveViewModel.swift`**
+- [x] **Step 3: Implement `ArchiveViewModel.swift`**
 
 Connect `ArchiveEngine` calls with main thread published states and search filter logic.
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `swift test --package-path "/Users/panpan/Mac project/RarPeek" --filter ArchiveViewModelTests`
 Expected: PASS.
 
-- [ ] **Step 5: Commit changes**
+- [x] **Step 5: Commit changes**
 
 ```bash
 git add RarPeek/Sources/RarPeekCore/ViewModels RarPeek/Tests/RarPeekTests
@@ -216,16 +216,16 @@ git commit -m "feat(rarpeek): implement ArchiveViewModel state management"
 - Beautiful macOS window with smooth transitions between Drop Zone and Inspector View.
 - File tree list with checkboxes, system file icons, format badges, and action toolbar.
 
-- [ ] **Step 1: Implement Views**
+- [x] **Step 1: Implement Views**
 
 Build `ArchiveDropZoneView`, `ArchiveInspectorView`, `ArchiveEntryRowView`, `PasswordPromptView`, and `RarPeekApp`.
 
-- [ ] **Step 2: Verify build compiles cleanly**
+- [x] **Step 2: Verify build compiles cleanly**
 
 Run: `swift build --package-path "/Users/panpan/Mac project/RarPeek"`
 Expected: Build complete with 0 errors.
 
-- [ ] **Step 3: Commit changes**
+- [x] **Step 3: Commit changes**
 
 ```bash
 git add RarPeek/Sources
@@ -239,24 +239,24 @@ git commit -m "feat(rarpeek): implement modern SwiftUI user interface views"
 **Files:**
 - Target: `/Applications/RarPeek.app`
 
-- [ ] **Step 1: Run full test suite**
+- [x] **Step 1: Run full test suite**
 
 Run: `swift test --package-path "/Users/panpan/Mac project/RarPeek"`
 Expected: All tests pass.
 
-- [ ] **Step 2: Package Release App Bundle**
+- [x] **Step 2: Package Release App Bundle**
 
 Run: `cd "/Users/panpan/Mac project/RarPeek" && ./scripts/package_app.sh`
 
-- [ ] **Step 3: Install to `/Applications/RarPeek.app`**
+- [x] **Step 3: Install to `/Applications/RarPeek.app`**
 
 Copy bundle to `/Applications/RarPeek.app` and sign ad-hoc.
 
-- [ ] **Step 4: Verify application launch**
+- [x] **Step 4: Verify application launch**
 
 Run `open /Applications/RarPeek.app` and verify running process.
 
-- [ ] **Step 5: Commit release updates**
+- [x] **Step 5: Commit release updates**
 
 ```bash
 git add .
