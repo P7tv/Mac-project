@@ -26,6 +26,7 @@ public final class ArchiveViewModel: ObservableObject {
     @Published public var alertMessage: String? = nil
 
     @Published public var isShowingPasswordPrompt: Bool = false
+    @Published public var isShowingRecoverySheet: Bool = false
     @Published public var passwordInput: String = ""
     @Published public var extractedOutputURL: URL? = nil
 
@@ -108,6 +109,15 @@ public final class ArchiveViewModel: ObservableObject {
 
     private func performExtraction(selectedOnly: Bool) async {
         guard let archive = currentArchive else { return }
+
+        // If archive is encrypted and user hasn't provided a password, prompt first
+        let currentPassword = passwordInput.trimmingCharacters(in: .whitespacesAndNewlines)
+        if archive.isEncrypted && currentPassword.isEmpty {
+            self.isShowingPasswordPrompt = true
+            self.statusMessage = "Password required to extract this archive."
+            return
+        }
+
         isExtracting = true
         extractionProgress = 0.1
         statusMessage = "Extracting..."
@@ -122,7 +132,7 @@ public final class ArchiveViewModel: ObservableObject {
 
         let options = ExtractionOptions(
             targetFolder: dest,
-            password: passwordInput.isEmpty ? nil : passwordInput,
+            password: currentPassword.isEmpty ? nil : currentPassword,
             selectedIndexes: selectedIndexes,
             overwritePolicy: overwritePolicy,
             createContainingFolder: true
@@ -140,13 +150,26 @@ public final class ArchiveViewModel: ObservableObject {
             self.extractionProgress = 1.0
         } catch ArchiveEngineError.invalidPassword {
             self.isShowingPasswordPrompt = true
-            self.alertMessage = "Incorrect password. Please try again."
+            self.alertMessage = "Password incorrect. You can try again or use Password Recovery."
+            self.statusMessage = "Password required or incorrect."
         } catch {
             self.alertMessage = error.localizedDescription
             self.statusMessage = "Extraction failed."
         }
 
         isExtracting = false
+    }
+
+    public func applyRecoveredPassword(_ password: String) {
+        self.passwordInput = password
+        self.isShowingRecoverySheet = false
+        self.isShowingPasswordPrompt = false
+
+        if let archive = currentArchive {
+            Task {
+                await self.loadArchive(url: archive.fileURL, password: password)
+            }
+        }
     }
 
     public func revealExtractedFolder() {
