@@ -71,6 +71,33 @@ public final class SweepSpaceViewModel: ObservableObject {
         return base
     }
 
+    // MARK: - Developer Specific Filtered Lists
+
+    @Published public var developerDependencyFilter: String? = nil // nil = All, "node_modules", ".build", "venv", "target"
+
+    public var developerProjectDependencyItems: [CleanableItem] {
+        let allDev = items(for: .developerJunk)
+        let depKeywords = ["node_modules", ".build", "target", "venv", "Pods"]
+        return allDev.filter { item in
+            depKeywords.contains(where: { item.name.contains("(\($0))") })
+        }
+    }
+
+    public var developerGlobalCacheItems: [CleanableItem] {
+        let allDev = items(for: .developerJunk)
+        let depKeywords = ["node_modules", ".build", "target", "venv", "Pods"]
+        return allDev.filter { item in
+            !depKeywords.contains(where: { item.name.contains("(\($0))") })
+        }
+    }
+
+    public var filteredProjectDependencyItems: [CleanableItem] {
+        guard let filter = developerDependencyFilter else {
+            return developerProjectDependencyItems
+        }
+        return developerProjectDependencyItems.filter { $0.name.contains("(\(filter))") }
+    }
+
     // MARK: - Selection
 
     public func isSelected(_ id: UUID) -> Bool {
