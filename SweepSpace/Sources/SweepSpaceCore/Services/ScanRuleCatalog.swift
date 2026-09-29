@@ -77,8 +77,56 @@ public struct ScanRuleCatalog: Sendable {
                 isPerSubdirectory: false
             ),
             ScanRule(
+                name: "Yarn Cache",
+                path: home.appendingPathComponent("Library/Caches/Yarn", isDirectory: true),
+                category: .developerJunk,
+                isPerSubdirectory: false
+            ),
+            ScanRule(
                 name: "pnpm Store",
                 path: home.appendingPathComponent(".pnpm-store", isDirectory: true),
+                category: .developerJunk,
+                isPerSubdirectory: false
+            ),
+            ScanRule(
+                name: "Gradle Cache",
+                path: home.appendingPathComponent(".gradle/caches", isDirectory: true),
+                category: .developerJunk,
+                isPerSubdirectory: true
+            ),
+            ScanRule(
+                name: "Maven Repository Cache",
+                path: home.appendingPathComponent(".m2/repository", isDirectory: true),
+                category: .developerJunk,
+                isPerSubdirectory: true
+            ),
+            ScanRule(
+                name: "CoreSimulator Devices & Caches",
+                path: home.appendingPathComponent("Library/Developer/CoreSimulator/Devices", isDirectory: true),
+                category: .developerJunk,
+                isPerSubdirectory: true
+            ),
+            ScanRule(
+                name: "Go Module Cache",
+                path: home.appendingPathComponent("go/pkg/mod", isDirectory: true),
+                category: .developerJunk,
+                isPerSubdirectory: false
+            ),
+            ScanRule(
+                name: "Go Build Cache",
+                path: home.appendingPathComponent(".cache/go-build", isDirectory: true),
+                category: .developerJunk,
+                isPerSubdirectory: false
+            ),
+            ScanRule(
+                name: "Python pip Cache",
+                path: home.appendingPathComponent(".cache/pip", isDirectory: true),
+                category: .developerJunk,
+                isPerSubdirectory: false
+            ),
+            ScanRule(
+                name: "Rust Cargo Registry",
+                path: home.appendingPathComponent(".cargo/registry", isDirectory: true),
                 category: .developerJunk,
                 isPerSubdirectory: false
             ),

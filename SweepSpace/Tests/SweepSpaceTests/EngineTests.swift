@@ -77,4 +77,21 @@ final class EngineTests: XCTestCase {
         XCTAssertEqual(result.cleanedBytes, 1024 * 50)
         XCTAssertFalse(FileManager.default.fileExists(atPath: testFile.path))
     }
+
+    func testProjectDependenciesScanning() async throws {
+        // Create mock project structure: /tmp/MyTestProject/node_modules/mock.js
+        let projectDir = tempDirectory.appendingPathComponent("MyTestProject/node_modules", isDirectory: true)
+        try FileManager.default.createDirectory(at: projectDir, withIntermediateDirectories: true)
+
+        let mockFile = projectDir.appendingPathComponent("bundle.js")
+        let data = Data(repeating: 0x99, count: 1024 * 1024 * 2) // 2 MB
+        try data.write(to: mockFile)
+
+        let engine = DiskScanEngine()
+        let discovered = await engine.scanProjectDependencies(roots: [tempDirectory], maxDepth: 4)
+
+        XCTAssertTrue(discovered.contains { $0.name.contains("node_modules") })
+        XCTAssertTrue(discovered.contains { $0.name.contains("MyTestProject") })
+        XCTAssertGreaterThanOrEqual(discovered.first?.sizeBytes ?? 0, 1024 * 1024 * 2)
+    }
 }

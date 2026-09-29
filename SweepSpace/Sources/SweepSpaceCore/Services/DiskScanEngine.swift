@@ -123,7 +123,83 @@ public actor DiskScanEngine {
             }
         }
 
+        // 3. Scan Project Dependencies (node_modules, .build, target, venv, Pods)
+        let projectDeps = scanProjectDependencies()
+        for item in projectDeps {
+            if shouldStop { break }
+            scannedCount += 1
+            totalBytes += item.sizeBytes
+            results.append(item)
+
+            onProgress?(ScanProgress(
+                currentPath: item.path.path,
+                scannedItemsCount: scannedCount,
+                discoveredBytes: totalBytes
+            ))
+        }
+
         return results
+    }
+
+    public func scanProjectDependencies(
+        roots: [URL] = [FileManager.default.homeDirectoryForCurrentUser],
+        maxDepth: Int = 4
+    ) -> [CleanableItem] {
+        let targetFolderNames: Set<String> = ["node_modules", ".build", "target", "venv", ".venv", "Pods"]
+        let ignoredSubstrings: [String] = ["/Library/", "/.Trash/", "/.cursor/", "/.vscode/", "/.git/", "/Library", "/Applications"]
+
+        var discovered: [CleanableItem] = []
+
+        for root in roots {
+            guard let enumerator = FileManager.default.enumerator(
+                at: root,
+                includingPropertiesForKeys: [.isDirectoryKey],
+                options: [.skipsPackageDescendants]
+            ) else {
+                continue
+            }
+
+            for case let itemURL as URL in enumerator {
+                if shouldStop { break }
+
+                let pathString = itemURL.path
+                if ignoredSubstrings.contains(where: { pathString.contains($0) }) {
+                    enumerator.skipDescendants()
+                    continue
+                }
+
+                // Check depth limit
+                let relativeComponents = itemURL.pathComponents.dropFirst(root.pathComponents.count)
+                if relativeComponents.count > maxDepth {
+                    enumerator.skipDescendants()
+                    continue
+                }
+
+                let folderName = itemURL.lastPathComponent
+                if targetFolderNames.contains(folderName) {
+                    // Skip descending into children of this dependency folder
+                    enumerator.skipDescendants()
+
+                    let projectName = itemURL.deletingLastPathComponent().lastPathComponent
+                    let (size, count, modDate) = calculateDirectoryMetrics(for: itemURL)
+
+                    if size > 1024 * 1024 { // Minimum 1MB to avoid cluttering with empty dirs
+                        let displayName = "\(projectName) (\(folderName))"
+                        discovered.append(CleanableItem(
+                            name: displayName,
+                            path: itemURL,
+                            sizeBytes: size,
+                            category: .developerJunk,
+                            isSafeToClean: true,
+                            fileCount: count,
+                            modificationDate: modDate
+                        ))
+                    }
+                }
+            }
+        }
+
+        return discovered
     }
 
     public nonisolated func calculateDirectoryMetrics(for url: URL) -> (size: Int64, count: Int, modificationDate: Date?) {
