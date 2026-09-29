@@ -25,10 +25,10 @@
 - Create: `SweepSpace/Sources/SweepSpaceCore/Models/DiskSpaceInfo.swift`
 - Create: `SweepSpace/Tests/SweepSpaceTests/ModelTests.swift`
 
-- [ ] **Step 1: Create `SweepSpace/Package.swift`**
-- [ ] **Step 2: Create data models (`CleanableItem`, `CleaningCategory`, `DiskSpaceInfo`)**
-- [ ] **Step 3: Write and run unit tests for models**
-- [ ] **Step 4: Commit changes**
+- [x] **Step 1: Create `SweepSpace/Package.swift`**
+- [x] **Step 2: Create data models (`CleanableItem`, `CleaningCategory`, `DiskSpaceInfo`)**
+- [x] **Step 3: Write and run unit tests for models**
+- [x] **Step 4: Commit changes**
 
 ---
 
@@ -41,12 +41,12 @@
 - Create: `SweepSpace/Sources/SweepSpaceCore/Services/DiskCleaner.swift`
 - Create: `SweepSpace/Tests/SweepSpaceTests/EngineTests.swift`
 
-- [ ] **Step 1: Write `DiskSpaceCalculator.swift` to read active volume metrics**
-- [ ] **Step 2: Write `ScanRuleCatalog.swift` with safe paths for caches, developer junk, and large files**
-- [ ] **Step 3: Write `DiskScanEngine.swift` for multi-threaded recursive size scanning**
-- [ ] **Step 4: Write `DiskCleaner.swift` for safe trash/deletion**
-- [ ] **Step 5: Write unit tests in `EngineTests.swift` and verify they pass**
-- [ ] **Step 6: Commit changes**
+- [x] **Step 1: Write `DiskSpaceCalculator.swift` to read active volume metrics**
+- [x] **Step 2: Write `ScanRuleCatalog.swift` with safe paths for caches, developer junk, and large files**
+- [x] **Step 3: Write `DiskScanEngine.swift` for multi-threaded recursive size scanning**
+- [x] **Step 4: Write `DiskCleaner.swift` for safe trash/deletion**
+- [x] **Step 5: Write unit tests in `EngineTests.swift` and verify they pass**
+- [x] **Step 6: Commit changes**
 
 ---
 
@@ -56,10 +56,10 @@
 - Create: `SweepSpace/Sources/SweepSpaceCore/ViewModels/SweepSpaceViewModel.swift`
 - Create: `SweepSpace/Tests/SweepSpaceTests/ViewModelTests.swift`
 
-- [ ] **Step 1: Implement `SweepSpaceViewModel.swift` with scanning, selection management, and cleaning execution**
-- [ ] **Step 2: Write unit tests for ViewModel scanning, selection toggling, and size calculations**
-- [ ] **Step 3: Run tests to verify they pass**
-- [ ] **Step 4: Commit changes**
+- [x] **Step 1: Implement `SweepSpaceViewModel.swift` with scanning, selection management, and cleaning execution**
+- [x] **Step 2: Write unit tests for ViewModel scanning, selection toggling, and size calculations**
+- [x] **Step 3: Run tests to verify they pass**
+- [x] **Step 4: Commit changes**
 
 ---
 
@@ -74,13 +74,13 @@
 - Create: `SweepSpace/Sources/SweepSpaceCore/Views/MainDashboardView.swift`
 - Create: `SweepSpace/Sources/SweepSpace/SweepSpaceApp.swift`
 
-- [ ] **Step 1: Build `DiskHeroCardView` with circular disk gauge and quick stats**
-- [ ] **Step 2: Build `CategoryRowView` and `CleanableItemRowView` with item selection and size badges**
-- [ ] **Step 3: Build `LargeFilesBrowserView` with size/type filters and QuickLook integration**
-- [ ] **Step 4: Build `CleanSummaryView` with celebration animation and reclaimed space readout**
-- [ ] **Step 5: Assemble `MainDashboardView` and `SweepSpaceApp`**
-- [ ] **Step 6: Build application and verify compilation**
-- [ ] **Step 7: Commit changes**
+- [x] **Step 1: Build `DiskHeroCardView` with circular disk gauge and quick stats**
+- [x] **Step 2: Build `CategoryRowView` and `CleanableItemRowView` with item selection and size badges**
+- [x] **Step 3: Build `LargeFilesBrowserView` with size/type filters and QuickLook integration**
+- [x] **Step 4: Build `CleanSummaryView` with celebration animation and reclaimed space readout**
+- [x] **Step 5: Assemble `MainDashboardView` and `SweepSpaceApp`**
+- [x] **Step 6: Build application and verify compilation**
+- [x] **Step 7: Commit changes**
 
 ---
 
@@ -91,9 +91,9 @@
 - Create: `SweepSpace/scripts/package_app.sh`
 - Target: `/Applications/SweepSpace.app`
 
-- [ ] **Step 1: Generate modern App Icon for SweepSpace**
-- [ ] **Step 2: Create Info.plist and package_app.sh**
-- [ ] **Step 3: Run full automated test suite (`swift test`)**
-- [ ] **Step 4: Package and install `/Applications/SweepSpace.app`**
-- [ ] **Step 5: Verify app execution and launch**
-- [ ] **Step 6: Commit all remaining changes**
+- [x] **Step 1: Generate modern App Icon for SweepSpace**
+- [x] **Step 2: Create Info.plist and package_app.sh**
+- [x] **Step 3: Run full automated test suite (`swift test`)**
+- [x] **Step 4: Package and install `/Applications/SweepSpace.app`**
+- [x] **Step 5: Verify app execution and launch**
+- [x] **Step 6: Commit all remaining changes**
