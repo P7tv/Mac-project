@@ -16,10 +16,10 @@
 - Modify: `SweepSpace/Sources/SweepSpaceCore/Services/ScanRuleCatalog.swift`
 - Test: `SweepSpace/Tests/SweepSpaceTests/EngineTests.swift`
 
-- [ ] **Step 1: Add rules for Gradle, CoreSimulator, Go, Cargo, pip, and Maven**
-- [ ] **Step 2: Update unit tests in `EngineTests.swift`**
-- [ ] **Step 3: Run tests to verify they pass**
-- [ ] **Step 4: Commit changes**
+- [x] **Step 1: Add rules for Gradle, CoreSimulator, Go, Cargo, pip, and Maven**
+- [x] **Step 2: Update unit tests in `EngineTests.swift`**
+- [x] **Step 3: Run tests to verify they pass**
+- [x] **Step 4: Commit changes**
 
 ---
 
@@ -29,10 +29,10 @@
 - Modify: `SweepSpace/Sources/SweepSpaceCore/Services/DiskScanEngine.swift`
 - Test: `SweepSpace/Tests/SweepSpaceTests/EngineTests.swift`
 
-- [ ] **Step 1: Implement `scanProjectDependencies` targeting `node_modules`, `.build`, `target`, `venv`, `Pods`**
-- [ ] **Step 2: Add unit tests verifying project dependency discovery and size calculation**
-- [ ] **Step 3: Run tests to verify they pass**
-- [ ] **Step 4: Commit changes**
+- [x] **Step 1: Implement `scanProjectDependencies` targeting `node_modules`, `.build`, `target`, `venv`, `Pods`**
+- [x] **Step 2: Add unit tests verifying project dependency discovery and size calculation**
+- [x] **Step 3: Run tests to verify they pass**
+- [x] **Step 4: Commit changes**
 
 ---
 
@@ -42,10 +42,10 @@
 - Modify: `SweepSpace/Sources/SweepSpaceCore/Views/MainDashboardView.swift`
 - Modify: `SweepSpace/Sources/SweepSpaceCore/ViewModels/SweepSpaceViewModel.swift`
 
-- [ ] **Step 1: Add developer dependency filtering helpers to `SweepSpaceViewModel`**
-- [ ] **Step 2: Enhance the Developer Tab in `MainDashboardView` with Project Dependencies breakdown and sub-filter pills**
-- [ ] **Step 3: Test build and compilation**
-- [ ] **Step 4: Commit changes**
+- [x] **Step 1: Add developer dependency filtering helpers to `SweepSpaceViewModel`**
+- [x] **Step 2: Enhance the Developer Tab in `MainDashboardView` with Project Dependencies breakdown and sub-filter pills**
+- [x] **Step 3: Test build and compilation**
+- [x] **Step 4: Commit changes**
 
 ---
 
@@ -54,7 +54,7 @@
 **Files:**
 - Target: `/Applications/SweepSpace.app`
 
-- [ ] **Step 1: Run full automated test suite (`swift test`)**
-- [ ] **Step 2: Run `./scripts/package_app.sh` and install to `/Applications/SweepSpace.app`**
-- [ ] **Step 3: Launch `/Applications/SweepSpace.app` and verify live operation**
-- [ ] **Step 4: Commit final changes**
+- [x] **Step 1: Run full automated test suite (`swift test`)**
+- [x] **Step 2: Run `./scripts/package_app.sh` and install to `/Applications/SweepSpace.app`**
+- [x] **Step 3: Launch `/Applications/SweepSpace.app` and verify live operation**
+- [x] **Step 4: Commit final changes**
