@@ -32,7 +32,7 @@ public final class AudioTranscriptionEngine: ObservableObject {
     @Published public var errorMessage: String? = nil
 
     public var onSegmentReceived: ((String, Bool) -> Void)? // (transcript, isFinal)
-    public var onRecognitionEvent: ((SpeechRecognitionEvent) -> Void)?
+    public var onRecognitionEvent: (@MainActor (SpeechRecognitionEvent) -> Void)?
 
     private var audioEngine: AVAudioEngine?
     private var speechRecognizer: SFSpeechRecognizer?
@@ -147,6 +147,11 @@ public final class AudioTranscriptionEngine: ObservableObject {
         if let endedSessionID {
             onRecognitionEvent?(.sessionEnded(sessionID: endedSessionID))
         }
+    }
+
+    public func restartRecognitionStream() {
+        guard isRecording else { return }
+        restartContinuousStream()
     }
 
     private func startRecognitionStream(

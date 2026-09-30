@@ -15,7 +15,6 @@ public final class SpeechChunker {
     private var committedPrefixFingerprint: UInt64?
     private var streamCarryover = ""
     private var streamCarryoverOverlap = 0
-    private var streamCarryoverSeparator = ""
     private var carriesOpenSentence = false
 
     private var currentSentence = ""
@@ -106,7 +105,6 @@ public final class SpeechChunker {
             committedPrefixFingerprint = fingerprintPrefix(snapshot.transcript, characterCount: 0)
             streamCarryover = ""
             streamCarryoverOverlap = 0
-            streamCarryoverSeparator = ""
             carriesOpenSentence = false
             lastImmediatePreviewText = nil
         }
@@ -135,8 +133,13 @@ public final class SpeechChunker {
         var carryoverIsActive = carriesOpenSentence && committedCharacterCount == streamCarryoverOverlap
 
         if carryoverIsActive {
-            candidate = streamCarryover + streamCarryoverSeparator + sourceSuffix
-            carryoverPrefixCount = streamCarryover.count + streamCarryoverSeparator.count
+            let carryoverSeparator = separator(
+                between: streamCarryover,
+                and: sourceSuffix,
+                localeIdentifier: snapshot.localeIdentifier
+            )
+            candidate = streamCarryover + carryoverSeparator + sourceSuffix
+            carryoverPrefixCount = streamCarryover.count + carryoverSeparator.count
         } else {
             candidate = sourceSuffix
         }
@@ -156,7 +159,6 @@ public final class SpeechChunker {
                 carryoverIsActive = false
                 carriesOpenSentence = false
                 streamCarryover = ""
-                streamCarryoverSeparator = ""
             } else {
                 sourceCharactersConsumed += split.consumedCharacterCount
             }
@@ -185,7 +187,6 @@ public final class SpeechChunker {
             )
             carriesOpenSentence = false
             streamCarryover = ""
-            streamCarryoverSeparator = ""
             lastImmediatePreviewText = nil
         }
 
@@ -214,10 +215,6 @@ public final class SpeechChunker {
                 incoming: snapshot.transcript,
                 localeIdentifier: snapshot.localeIdentifier
             )
-        let incomingSuffix = String(Array(snapshot.transcript).dropFirst(streamCarryoverOverlap))
-        streamCarryoverSeparator = carriesOpenSentence
-            ? separator(between: carryover, and: incomingSuffix, localeIdentifier: snapshot.localeIdentifier)
-            : ""
         committedCharacterCount = streamCarryoverOverlap
         committedPrefixFingerprint = fingerprintPrefix(
             snapshot.transcript,
@@ -247,7 +244,6 @@ public final class SpeechChunker {
         committedPrefixFingerprint = nil
         streamCarryover = ""
         streamCarryoverOverlap = 0
-        streamCarryoverSeparator = ""
         carriesOpenSentence = false
         currentSentence = ""
         previousSentence = nil

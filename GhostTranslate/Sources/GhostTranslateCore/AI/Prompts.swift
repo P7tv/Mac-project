@@ -11,7 +11,30 @@ public enum Prompts {
     1. Output ONLY the translation.
     2. Do NOT add notes, explanations, or quotes.
     3. Keep it concise so it reads easily as a live subtitle.
+    4. When prior context is provided, do not translate or repeat it; translate only the current sentence.
     """
+
+    public static func subtitleUserPrompt(
+        currentSentence: String,
+        contextSentence: String?
+    ) -> String {
+        guard let contextSentence,
+              !contextSentence.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            return currentSentence
+        }
+
+        return """
+        Previous sentence for context only (do not translate or repeat it):
+        <context>
+        \(contextSentence)
+        </context>
+
+        Translate the current sentence only:
+        <current_sentence>
+        \(currentSentence)
+        </current_sentence>
+        """
+    }
     
     public static func detectLanguageTag(_ text: String) -> String {
         let hasThai = text.unicodeScalars.contains { $0.value >= 0x0E00 && $0.value <= 0x0E7F }

@@ -69,10 +69,13 @@ public actor TyphoonService {
     }
     
     /// Translates text quickly for live subtitles
-    public func translateSubtitle(text: String) async throws -> String {
+    public func translateSubtitle(text: String, context: String? = nil) async throws -> String {
         let messages = [
             TyphoonMessage(role: "system", content: Prompts.subtitleSystemPrompt),
-            TyphoonMessage(role: "user", content: text)
+            TyphoonMessage(
+                role: "user",
+                content: Prompts.subtitleUserPrompt(currentSentence: text, contextSentence: context)
+            )
         ]
         return try await sendChatCompletion(messages: messages, maxTokens: 150, temperature: 0.2)
     }

@@ -44,4 +44,22 @@ final class TyphoonServiceTests: XCTestCase {
         XCTAssertFalse(structured.questionSummary.isEmpty)
         XCTAssertEqual(structured.bulletPoints.count, 3)
     }
+
+    func testContextPromptTranslatesOnlyCurrentSentence() {
+        let prompt = Prompts.subtitleUserPrompt(
+            currentSentence: "I shipped the feature.",
+            contextSentence: "We discussed the launch yesterday."
+        )
+
+        XCTAssertTrue(prompt.contains("We discussed the launch yesterday."))
+        XCTAssertTrue(prompt.contains("I shipped the feature."))
+        XCTAssertTrue(prompt.contains("current sentence only"))
+    }
+
+    func testPromptWithoutContextKeepsCurrentSentenceOnly() {
+        XCTAssertEqual(
+            Prompts.subtitleUserPrompt(currentSentence: "Hello world.", contextSentence: nil),
+            "Hello world."
+        )
+    }
 }

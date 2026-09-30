@@ -62,7 +62,17 @@ public final class AppState: ObservableObject {
     }
     
     private var translationDebounceTask: Task<Void, Never>?
+    private var pausePreviewTask: Task<Void, Never>?
+    private var checkpointTask: Task<Void, Never>?
+    private var previewTranslationGate = LatestTranslationGate()
+    private var finalizedTranslationGate = LatestTranslationGate()
+    private var activeRecognitionSessionID: UUID?
+    private var latestChunkingRevision: UInt64 = 0
+    private var lastPreviewRequest: SentenceTranslationInput?
     private var cancellables = Set<AnyCancellable>()
+
+    private let pausePreviewDelay: UInt64 = 350_000_000
+    private let checkpointDelay: UInt64 = 4_000_000_000
     
     public init() {
         let storedKey = UserDefaults.standard.string(forKey: "ghost_typhoon_api_key") ?? ""
@@ -79,24 +89,196 @@ public final class AppState: ObservableObject {
     }
     
     private func setupAudioCallbacks() {
-        audioEngine.onSegmentReceived = { [weak self] transcript, isFinal in
-            guard let self = self else { return }
-            
-            // Smart Sentence Chunking for long speeches
-            let (committed, remainder) = self.chunker.process(fullTranscript: transcript, isFinal: isFinal)
-            
-            // Process newly committed clauses
-            for segment in committed {
-                Task {
-                    let translated = try? await self.typhoon.translateSubtitle(text: segment)
-                    self.previousLine = SubtitleLine(original: segment, translation: translated ?? segment)
+        audioEngine.onSegmentReceived = nil
+        audioEngine.onRecognitionEvent = { [weak self] event in
+            self?.handleRecognitionEvent(event)
+        }
+    }
+
+    private func handleRecognitionEvent(_ event: SpeechRecognitionEvent) {
+        switch event {
+        case .snapshot(let snapshot):
+            if activeRecognitionSessionID != snapshot.sessionID {
+                cancelPreviewTimers()
+                previewTranslationGate.invalidate()
+                finalizedTranslationGate.invalidate()
+                if aiStatus == .translating {
+                    aiStatus = .idle
+                }
+                activeRecognitionSessionID = snapshot.sessionID
+                lastPreviewRequest = nil
+            }
+
+            let update = chunker.process(.snapshot(snapshot))
+            let recognitionChanged = update.revision != latestChunkingRevision
+            latestChunkingRevision = update.revision
+            let currentInput = chunker.previewCurrentSentence(
+                sessionID: snapshot.sessionID,
+                expectedRevision: update.revision
+            )
+            if currentInput != lastPreviewRequest {
+                if lastPreviewRequest != nil {
+                    previewTranslationGate.invalidate()
+                    if aiStatus == .translating {
+                        aiStatus = .idle
+                    }
+                }
+                lastPreviewRequest = nil
+            }
+            if !update.finalized.isEmpty {
+                previewTranslationGate.invalidate()
+                lastPreviewRequest = nil
+                translatedText = ""
+                if aiStatus == .translating {
+                    aiStatus = .idle
+                }
+                translateFinalized(update.finalized.last!)
+                checkpointTask?.cancel()
+                checkpointTask = nil
+            }
+
+            if let current = currentInput {
+                originalText = current.text
+                if recognitionChanged {
+                    schedulePausePreview(sessionID: snapshot.sessionID, revision: update.revision)
+                }
+                scheduleCheckpoint(sessionID: snapshot.sessionID)
+            } else {
+                cancelPreviewTimers()
+                if let latestFinal = update.finalized.last {
+                    originalText = latestFinal.text
                 }
             }
-            
-            // Active live remainder
-            let activeText = remainder.isEmpty ? (committed.last ?? transcript) : remainder
-            self.originalText = activeText
-            self.debounceTranslation(text: activeText, immediate: isFinal)
+
+            if let preview = update.preview {
+                requestPreview(preview)
+            }
+
+        case .sessionEnded(let sessionID):
+            let update = chunker.process(.sessionEnded(sessionID: sessionID))
+            latestChunkingRevision = update.revision
+            cancelPreviewTimers()
+            previewTranslationGate.invalidate()
+            lastPreviewRequest = nil
+            if aiStatus == .translating {
+                aiStatus = .idle
+            }
+            if activeRecognitionSessionID == sessionID {
+                activeRecognitionSessionID = nil
+            }
+            if let finalInput = update.finalized.last {
+                translatedText = ""
+                originalText = finalInput.text
+                translateFinalized(finalInput)
+            }
+        }
+    }
+
+    private func schedulePausePreview(sessionID: UUID, revision: UInt64) {
+        pausePreviewTask?.cancel()
+        pausePreviewTask = Task { [weak self] in
+            guard let self else { return }
+            do {
+                try await Task.sleep(nanoseconds: self.pausePreviewDelay)
+            } catch {
+                return
+            }
+            guard !Task.isCancelled,
+                  let input = self.chunker.previewCurrentSentence(
+                    sessionID: sessionID,
+                    expectedRevision: revision
+                  ) else {
+                return
+            }
+            self.pausePreviewTask = nil
+            self.requestPreview(input)
+        }
+    }
+
+    private func scheduleCheckpoint(sessionID: UUID) {
+        guard checkpointTask == nil else { return }
+        checkpointTask = Task { [weak self] in
+            guard let self else { return }
+            do {
+                try await Task.sleep(nanoseconds: self.checkpointDelay)
+            } catch {
+                return
+            }
+            guard !Task.isCancelled else { return }
+            self.checkpointTask = nil
+            guard self.activeRecognitionSessionID == sessionID,
+                  let input = self.chunker.previewCurrentSentence(
+                    sessionID: sessionID,
+                    expectedRevision: self.latestChunkingRevision
+                  ) else {
+                return
+            }
+            self.requestPreview(input)
+            self.scheduleCheckpoint(sessionID: sessionID)
+        }
+    }
+
+    private func cancelPreviewTimers() {
+        pausePreviewTask?.cancel()
+        pausePreviewTask = nil
+        checkpointTask?.cancel()
+        checkpointTask = nil
+    }
+
+    private func requestPreview(_ input: SentenceTranslationInput) {
+        guard !input.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+              input != lastPreviewRequest else {
+            return
+        }
+        lastPreviewRequest = input
+        let ticket = previewTranslationGate.issue()
+        aiStatus = .translating
+        Task {
+            await translatePreview(input, ticket: ticket)
+        }
+    }
+
+    private func translatePreview(_ input: SentenceTranslationInput, ticket: UInt64) async {
+        let startTime = DispatchTime.now()
+        do {
+            if windowManager.currentMode == .interviewPrompter {
+                let result = try await typhoon.generateInterviewPrompts(question: input.text)
+                guard previewTranslationGate.accepts(ticket) else { return }
+                interviewResult = result
+                translatedText = result.questionSummary
+            } else {
+                let translation = try await typhoon.translateSubtitle(
+                    text: input.text,
+                    context: input.context
+                )
+                guard previewTranslationGate.accepts(ticket) else { return }
+                translatedText = translation
+            }
+
+            guard previewTranslationGate.accepts(ticket) else { return }
+            let elapsed = DispatchTime.now().uptimeNanoseconds - startTime.uptimeNanoseconds
+            latencyMs = Int(elapsed / 1_000_000)
+            aiStatus = .idle
+        } catch {
+            guard previewTranslationGate.accepts(ticket) else { return }
+            aiStatus = .error(error.localizedDescription)
+        }
+    }
+
+    private func translateFinalized(_ input: SentenceTranslationInput) {
+        let ticket = finalizedTranslationGate.issue()
+        Task {
+            do {
+                let translation = try await typhoon.translateSubtitle(
+                    text: input.text,
+                    context: input.context
+                )
+                guard finalizedTranslationGate.accepts(ticket) else { return }
+                previousLine = SubtitleLine(original: input.text, translation: translation)
+            } catch {
+                guard finalizedTranslationGate.accepts(ticket) else { return }
+                previousLine = SubtitleLine(original: input.text, translation: input.text)
+            }
         }
     }
     
@@ -105,6 +287,8 @@ public final class AppState: ObservableObject {
         guard !trimmed.isEmpty else { return }
         
         translationDebounceTask?.cancel()
+        let ticket = previewTranslationGate.issue()
+        lastPreviewRequest = nil
         
         let delayNanoseconds: UInt64 = immediate ? 50_000_000 : 500_000_000 // 50ms or 500ms
         
@@ -114,7 +298,10 @@ public final class AppState: ObservableObject {
                     try await Task.sleep(nanoseconds: delayNanoseconds)
                 }
                 guard !Task.isCancelled else { return }
-                await self.performTranslation(for: trimmed)
+                await self.translatePreview(
+                    SentenceTranslationInput(text: trimmed, context: nil),
+                    ticket: ticket
+                )
             } catch {
                 // Task cancelled
             }
@@ -123,45 +310,35 @@ public final class AppState: ObservableObject {
     
     public func performTranslation(for text: String) async {
         guard !text.isEmpty else { return }
-        self.aiStatus = .translating
-        let startTime = DispatchTime.now()
-        
-        do {
-            if windowManager.currentMode == .interviewPrompter {
-                let result = try await typhoon.generateInterviewPrompts(question: text)
-                self.interviewResult = result
-                self.translatedText = result.questionSummary
-            } else {
-                let thaiText = try await typhoon.translateSubtitle(text: text)
-                self.translatedText = thaiText
-            }
-            
-            let endTime = DispatchTime.now()
-            let nanoTime = endTime.uptimeNanoseconds - startTime.uptimeNanoseconds
-            self.latencyMs = Int(nanoTime / 1_000_000)
-            self.aiStatus = .idle
-        } catch {
-            self.aiStatus = .error(error.localizedDescription)
-        }
+        let ticket = previewTranslationGate.issue()
+        lastPreviewRequest = nil
+        aiStatus = .translating
+        await translatePreview(SentenceTranslationInput(text: text, context: nil), ticket: ticket)
     }
     
     public func triggerScreenOCR() {
+        let ticket = previewTranslationGate.issue()
+        lastPreviewRequest = nil
         snipper.startCapture { [weak self] cgImage in
             guard let self = self, let image = cgImage else { return }
             Task {
                 do {
+                    guard self.previewTranslationGate.accepts(ticket) else { return }
                     self.aiStatus = .translating
                     let recognized = try await self.ocrEngine.recognizeText(from: image)
+                    guard self.previewTranslationGate.accepts(ticket) else { return }
                     guard !recognized.isEmpty else {
                         self.aiStatus = .error("No text detected in selected area")
                         return
                     }
                     self.originalText = recognized
                     let translated = try await self.typhoon.translateOCR(text: recognized)
+                    guard self.previewTranslationGate.accepts(ticket) else { return }
                     self.translatedText = translated
                     self.aiStatus = .idle
                     self.windowManager.show()
                 } catch {
+                    guard self.previewTranslationGate.accepts(ticket) else { return }
                     self.aiStatus = .error(error.localizedDescription)
                 }
             }
@@ -169,7 +346,15 @@ public final class AppState: ObservableObject {
     }
     
     public func clear() {
+        translationDebounceTask?.cancel()
+        translationDebounceTask = nil
+        cancelPreviewTimers()
+        previewTranslationGate.invalidate()
+        finalizedTranslationGate.invalidate()
+        activeRecognitionSessionID = nil
+        lastPreviewRequest = nil
         chunker.reset()
+        audioEngine.restartRecognitionStream()
         originalText = ""
         translatedText = ""
         previousLine = nil

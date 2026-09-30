@@ -199,6 +199,32 @@ final class SpeechChunkerTests: XCTestCase {
         XCTAssertEqual(update.preview?.text, text)
     }
 
+    func testDuplicateTimedSnapshotDoesNotRequestAnotherPreview() {
+        let chunker = SpeechChunker()
+        let sessionID = UUID()
+        let text = "The engineer joined the team and moved to Seattle"
+        let pauseOffset = (text as NSString).range(of: "and").location - 1
+        let pausedSnapshot = SpeechRecognitionSnapshot(
+            sessionID: sessionID,
+            streamID: UUID(),
+            localeIdentifier: "en-US",
+            transcript: text,
+            isFinal: false,
+            receivedAtUptime: 2,
+            segments: [
+                SpeechSegmentTiming(substringRange: NSRange(location: 0, length: pauseOffset), timestamp: 0, duration: 1),
+                SpeechSegmentTiming(
+                    substringRange: NSRange(location: pauseOffset + 1, length: (text as NSString).length - pauseOffset - 1),
+                    timestamp: 1.5,
+                    duration: 0.7
+                )
+            ]
+        )
+
+        XCTAssertEqual(chunker.process(.snapshot(pausedSnapshot)).preview?.text, text)
+        XCTAssertNil(chunker.process(.snapshot(pausedSnapshot)).preview)
+    }
+
     func testUsesEarliestPunctuationAndSupportsJapaneseWithoutSpaces() {
         let chunker = SpeechChunker()
         let sessionID = UUID()
@@ -233,6 +259,55 @@ final class SpeechChunkerTests: XCTestCase {
             ["This sentence is still open"]
         )
         XCTAssertTrue(chunker.process(.sessionEnded(sessionID: sessionID)).finalized.isEmpty)
+    }
+
+    func testResetClearsPreviousSentenceContext() {
+        let chunker = SpeechChunker()
+        let sessionID = UUID()
+        _ = chunker.process(.snapshot(snapshot(
+            sessionID: sessionID,
+            streamID: UUID(),
+            transcript: "We discussed the launch yesterday.",
+            isFinal: true
+        )))
+
+        chunker.reset()
+        let next = chunker.process(.snapshot(snapshot(
+            sessionID: sessionID,
+            streamID: UUID(),
+            transcript: "The launch went well"
+        )))
+
+        XCTAssertEqual(
+            chunker.previewCurrentSentence(sessionID: sessionID, expectedRevision: next.revision)?.context,
+            nil
+        )
+    }
+
+    func testResetStartsFreshSentenceOnRotatedStreamAfterClear() {
+        let chunker = SpeechChunker()
+        var tracker = RecognitionSessionTracker()
+        let firstStream = tracker.beginSession()
+        _ = chunker.process(.snapshot(snapshot(
+            sessionID: firstStream.sessionID,
+            streamID: firstStream.streamID,
+            transcript: "I started recording"
+        )))
+
+        chunker.reset()
+        let nextStream = tracker.beginStream()
+        let continued = chunker.process(.snapshot(snapshot(
+            sessionID: nextStream.sessionID,
+            streamID: nextStream.streamID,
+            transcript: "And then continued"
+        )))
+
+        XCTAssertEqual(nextStream.sessionID, firstStream.sessionID)
+        XCTAssertNotEqual(nextStream.streamID, firstStream.streamID)
+        XCTAssertEqual(
+            chunker.previewCurrentSentence(sessionID: nextStream.sessionID, expectedRevision: continued.revision),
+            SentenceTranslationInput(text: "And then continued", context: nil)
+        )
     }
 
     private func snapshot(
