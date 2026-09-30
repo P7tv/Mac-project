@@ -14,4 +14,24 @@ final class AudioTranscriptionTests: XCTestCase {
         XCTAssertTrue(supported.contains(where: { $0.identifier.hasPrefix("en") }))
         XCTAssertTrue(supported.contains(where: { $0.identifier.hasPrefix("th") }))
     }
+
+    func testRecognitionStreamKeepsSessionAndChangesStream() {
+        var tracker = RecognitionSessionTracker()
+        let first = tracker.beginSession()
+        let nextStream = tracker.beginStream()
+
+        XCTAssertEqual(nextStream.sessionID, first.sessionID)
+        XCTAssertNotEqual(nextStream.streamID, first.streamID)
+    }
+
+    func testEndingSessionCreatesANewSessionOnNextStart() {
+        var tracker = RecognitionSessionTracker()
+        let first = tracker.beginSession()
+
+        XCTAssertEqual(tracker.endSession(), first.sessionID)
+        let nextSession = tracker.beginSession()
+
+        XCTAssertNotEqual(nextSession.sessionID, first.sessionID)
+        XCTAssertNotEqual(nextSession.streamID, first.streamID)
+    }
 }
