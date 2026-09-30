@@ -41,7 +41,7 @@ final class TyphoonServiceTests: XCTestCase {
         - ข้อที่ 3: แสดงความมุ่งมั่น
         """
         let structured = Prompts.parseInterviewResponse(sampleMarkdown)
-        XCTAssertFalse(structured.questionSummary.isEmpty)
+        XCTAssertEqual(structured.questionSummary, "ทำไมเราควรจ้างคุณ?")
         XCTAssertEqual(structured.bulletPoints.count, 3)
     }
 

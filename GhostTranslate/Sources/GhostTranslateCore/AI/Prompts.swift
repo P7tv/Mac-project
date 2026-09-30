@@ -77,7 +77,14 @@ public enum Prompts {
             if line.contains("สรุปคำถาม") {
                 let parts = line.components(separatedBy: ":")
                 if parts.count > 1 {
-                    summary = parts.dropFirst().joined(separator: ":").trimmingCharacters(in: .whitespaces)
+                    summary = parts.dropFirst().joined(separator: ":")
+                        .trimmingCharacters(in: .whitespaces)
+                        .replacingOccurrences(
+                            of: "^\\*+\\s*|\\s*\\*+$",
+                            with: "",
+                            options: .regularExpression
+                        )
+                        .trimmingCharacters(in: .whitespaces)
                 } else {
                     summary = line
                 }
