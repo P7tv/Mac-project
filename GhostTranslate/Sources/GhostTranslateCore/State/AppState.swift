@@ -15,6 +15,13 @@ public enum AIStatus: Equatable {
     }
 }
 
+public struct SubtitleLine: Identifiable, Equatable {
+    public let id = UUID()
+    public let original: String
+    public let translation: String
+    public let timestamp: Date = Date()
+}
+
 @MainActor
 public final class AppState: ObservableObject {
     public static let shared = AppState()
@@ -25,10 +32,12 @@ public final class AppState: ObservableObject {
     public let typhoon = TyphoonService.shared
     public let ocrEngine = VisionOCREngine.shared
     public let snipper = ScreenSnipper.shared
+    public let chunker = SpeechChunker()
     
     // Translation & Content State
     @Published public var originalText: String = ""
     @Published public var translatedText: String = ""
+    @Published public var previousLine: SubtitleLine? = nil
     @Published public var interviewResult: InterviewPromptResult?
     @Published public var aiStatus: AIStatus = .idle
     @Published public var latencyMs: Int = 0
@@ -72,8 +81,22 @@ public final class AppState: ObservableObject {
     private func setupAudioCallbacks() {
         audioEngine.onSegmentReceived = { [weak self] transcript, isFinal in
             guard let self = self else { return }
-            self.originalText = transcript
-            self.debounceTranslation(text: transcript, immediate: isFinal)
+            
+            // Smart Sentence Chunking for long speeches
+            let (committed, remainder) = self.chunker.process(fullTranscript: transcript, isFinal: isFinal)
+            
+            // Process newly committed clauses
+            for segment in committed {
+                Task {
+                    let translated = try? await self.typhoon.translateSubtitle(text: segment)
+                    self.previousLine = SubtitleLine(original: segment, translation: translated ?? segment)
+                }
+            }
+            
+            // Active live remainder
+            let activeText = remainder.isEmpty ? (committed.last ?? transcript) : remainder
+            self.originalText = activeText
+            self.debounceTranslation(text: activeText, immediate: isFinal)
         }
     }
     
@@ -146,8 +169,10 @@ public final class AppState: ObservableObject {
     }
     
     public func clear() {
+        chunker.reset()
         originalText = ""
         translatedText = ""
+        previousLine = nil
         interviewResult = nil
         aiStatus = .idle
     }

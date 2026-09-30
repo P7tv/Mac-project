@@ -97,7 +97,7 @@ final class FirstMouseHostingView<Content: View>: NSHostingView<Content> {
         switch mode {
         case .subtitleBar:
             let width: CGFloat = min(860, screenRect.width * 0.75)
-            let height: CGFloat = 130
+            let height: CGFloat = 148
             let x = screenRect.origin.x + (screenRect.width - width) / 2.0
             let y = screenRect.origin.y + 60 // Floating above Dock / taskbar
             return NSRect(x: x, y: y, width: width, height: height)

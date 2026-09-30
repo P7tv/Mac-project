@@ -66,19 +66,31 @@ public struct SubtitleBarView: View {
                 }
             }
             
-            // Bottom Row: Translated Thai Subtitle
+            // Bottom Row: Rolling Subtitles (Previous line context + Live active line)
             HStack(alignment: .center, spacing: 12) {
-                if !appState.translatedText.isEmpty {
-                    Text(appState.translatedText)
-                        .font(.system(size: appState.subtitleFontSize + 3, weight: .bold))
-                        .foregroundColor(Color(red: 0.95, green: 0.98, blue: 1.0))
-                        .shadow(color: Color.black.opacity(0.8), radius: 2, x: 0, y: 1)
-                        .lineLimit(2)
-                        .fixedSize(horizontal: false, vertical: true)
-                } else {
-                    Text("คำแปลภาษาไทยจะปรากฏที่นี่แบบเรียลไทม์...")
-                        .font(.system(size: appState.subtitleFontSize, weight: .medium))
-                        .foregroundColor(.white.opacity(0.35))
+                VStack(alignment: .leading, spacing: 3) {
+                    // Previous Sentence (dimmed, for reading context)
+                    if let prev = appState.previousLine, !prev.translation.isEmpty {
+                        Text(prev.translation)
+                            .font(.system(size: appState.subtitleFontSize * 0.9, weight: .regular))
+                            .foregroundColor(.white.opacity(0.55))
+                            .lineLimit(1)
+                            .transition(.opacity)
+                    }
+                    
+                    // Current Active Sentence (bright, prominent, glowing)
+                    if !appState.translatedText.isEmpty {
+                        Text(appState.translatedText)
+                            .font(.system(size: appState.subtitleFontSize + 3, weight: .bold))
+                            .foregroundColor(Color(red: 0.95, green: 0.98, blue: 1.0))
+                            .shadow(color: Color.black.opacity(0.8), radius: 2, x: 0, y: 1)
+                            .lineLimit(2)
+                            .fixedSize(horizontal: false, vertical: true)
+                    } else {
+                        Text("คำแปลจะปรากฏที่นี่แบบเรียลไทม์...")
+                            .font(.system(size: appState.subtitleFontSize, weight: .medium))
+                            .foregroundColor(.white.opacity(0.35))
+                    }
                 }
                 
                 Spacer()
