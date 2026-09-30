@@ -29,12 +29,19 @@ public final class GhostWindowManager: ObservableObject {
         // Will be configured when hosting view is attached
     }
     
+// Custom NSHostingView that accepts mouse clicks even when the window is non-activating
+final class FirstMouseHostingView<Content: View>: NSHostingView<Content> {
+    override func acceptsFirstMouse(for event: NSEvent?) -> Bool {
+        return true
+    }
+}
+
     /// Attach the SwiftUI root view to the stealth GhostPanel
     public func setupPanel<Content: View>(with content: Content) {
         let initialRect = defaultRect(for: currentMode)
         let ghostPanel = GhostPanel(contentRect: initialRect)
         
-        let hostingView = NSHostingView(rootView: content)
+        let hostingView = FirstMouseHostingView(rootView: content)
         hostingView.wantsLayer = true
         hostingView.layer?.backgroundColor = .clear
         

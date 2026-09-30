@@ -51,8 +51,20 @@ public struct GhostHUDContainerView: View {
                     .background(Color.white.opacity(0.1))
                     .cornerRadius(4)
                 }
-                .buttonStyle(.plain)
-                .help("Switch between Subtitle Bar and Interview Co-pilot (⌥⌘M)")
+                // Automatic Language Status Badge
+                HStack(spacing: 3) {
+                    Image(systemName: "sparkles")
+                        .font(.system(size: 9))
+                        .foregroundColor(.yellow)
+                    Text("AUTO: EN ⟷ TH")
+                        .font(.system(size: 9, weight: .bold, design: .monospaced))
+                        .foregroundColor(.white.opacity(0.9))
+                }
+                .padding(.horizontal, 6)
+                .padding(.vertical, 2)
+                .background(Color.purple.opacity(0.35))
+                .cornerRadius(4)
+                .help("Automatically detects spoken language (English or Thai) and translates in real-time")
                 
                 Spacer()
                 

@@ -64,6 +64,10 @@ public final class HotkeyManager {
             GhostWindowManager.shared.toggleClickThrough()
             return true
             
+        case 37: // 'L' key (Listen)
+            AppState.shared.audioEngine.toggleTranscription()
+            return true
+            
         default:
             return false
         }

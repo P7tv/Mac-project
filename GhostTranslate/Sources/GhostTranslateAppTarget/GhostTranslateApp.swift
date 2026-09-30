@@ -63,9 +63,10 @@ struct GhostTranslateApp: App {
                 
                 Divider()
                 
-                Button(appState.audioEngine.isRecording ? "Pause Audio Listening" : "Start Audio Listening") {
+                Button(appState.audioEngine.isRecording ? "Pause Audio Listening (⌥⌘L)" : "Start Audio Listening (⌥⌘L)") {
                     appState.audioEngine.toggleTranscription()
                 }
+                .keyboardShortcut("l", modifiers: [.command, .option])
                 
                 Button("Clear Subtitles") {
                     appState.clear()

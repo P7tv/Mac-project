@@ -47,7 +47,7 @@ public final class GhostPanel: NSPanel {
     }
     
     public override var canBecomeMain: Bool {
-        return false
+        return true
     }
     
     /// Enable or disable mouse interaction pass-through.

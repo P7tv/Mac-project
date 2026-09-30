@@ -150,6 +150,7 @@ public struct SettingsView: View {
                 VStack(spacing: 8) {
                     HotkeyRow(keys: "⌥ ⌘ G", description: "Toggle Ghost Overlay (Show / Hide)")
                     HotkeyRow(keys: "⌥ ⌘ M", description: "Switch Mode (Subtitle Bar ↔ Interview Co-pilot)")
+                    HotkeyRow(keys: "⌥ ⌘ L", description: "Toggle Audio Listening (Start / Pause)")
                     HotkeyRow(keys: "⌥ ⌘ O", description: "Screen OCR Snip & Translate")
                     HotkeyRow(keys: "⌥ ⌘ C", description: "Toggle Click-Through Mode")
                 }

@@ -3,13 +3,28 @@ import Foundation
 public enum Prompts {
     public static let subtitleSystemPrompt = """
     You are an ultra-fast, natural real-time subtitle translator.
-    Your task: Translate the input speech transcript directly into clean, fluent, colloquial Thai.
+    Auto-detect the input language:
+    - If the input is in English (or foreign language): Translate it directly into natural, fluent Thai.
+    - If the input is in Thai: Translate it directly into natural English.
+    - If mixed Thai and English: Polish it into clean Thai while keeping technical terms intact.
     Rules:
-    1. Output ONLY the Thai translation.
+    1. Output ONLY the translation.
     2. Do NOT add notes, explanations, or quotes.
-    3. Keep it concise so it reads easily as a video/speech subtitle.
-    4. Handle technical terminology naturally in modern Thai or standard loan words.
+    3. Keep it concise so it reads easily as a live subtitle.
     """
+    
+    public static func detectLanguageTag(_ text: String) -> String {
+        let hasThai = text.unicodeScalars.contains { $0.value >= 0x0E00 && $0.value <= 0x0E7F }
+        let hasLatin = text.range(of: "[a-zA-Z]", options: .regularExpression) != nil
+        if hasThai && hasLatin {
+            return "TH / EN"
+        } else if hasThai {
+            return "TH ➔ EN"
+        } else if hasLatin {
+            return "EN ➔ TH"
+        }
+        return "AUTO"
+    }
     
     public static let interviewSystemPrompt = """
     You are an elite, real-time interview co-pilot.

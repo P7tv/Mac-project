@@ -28,13 +28,21 @@ public struct SubtitleBarView: View {
                 
                 // Original spoken speech
                 if !appState.originalText.isEmpty {
+                    Text(Prompts.detectLanguageTag(appState.originalText))
+                        .font(.system(size: 9, weight: .bold, design: .monospaced))
+                        .foregroundColor(.cyan)
+                        .padding(.horizontal, 5)
+                        .padding(.vertical, 2)
+                        .background(Color.cyan.opacity(0.18))
+                        .cornerRadius(4)
+                    
                     Text(appState.originalText)
                         .font(.system(size: appState.subtitleFontSize * 0.85, weight: .medium))
                         .foregroundColor(.white.opacity(0.7))
                         .lineLimit(1)
                         .truncationMode(.tail)
                 } else {
-                    Text("Listening for speech or movie dialogue...")
+                    Text("Listening for speech or dialogue...")
                         .font(.system(size: appState.subtitleFontSize * 0.85, weight: .regular))
                         .foregroundColor(.white.opacity(0.4))
                 }
