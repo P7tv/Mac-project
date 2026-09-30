@@ -117,6 +117,34 @@ public final class AppState: ObservableObject {
         audioEngine.onRecognitionEvent = { [weak self] event in
             self?.handleRecognitionEvent(event)
         }
+        windowManager.$currentMode
+            .dropFirst()
+            .sink { [weak self] mode in
+                self?.handleModeChange(mode)
+            }
+            .store(in: &cancellables)
+    }
+
+    private func handleModeChange(_ mode: HUDMode) {
+        previewTranslationGate.invalidate()
+        lastPreviewRequest = nil
+        interviewResult = nil
+        if aiStatus == .translating {
+            aiStatus = .idle
+        }
+
+        guard !originalText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            return
+        }
+
+        let openSentence = activeRecognitionSessionID.flatMap { sessionID in
+            chunker.previewCurrentSentence(
+                sessionID: sessionID,
+                expectedRevision: latestChunkingRevision
+            )
+        }
+        let input = openSentence ?? SentenceTranslationInput(text: originalText, context: nil)
+        requestPreview(input)
     }
 
     private func handleRecognitionEvent(_ event: SpeechRecognitionEvent) {

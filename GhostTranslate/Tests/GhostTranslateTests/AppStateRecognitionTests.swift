@@ -88,6 +88,54 @@ final class AppStateRecognitionTests: XCTestCase {
         XCTAssertEqual(appState.originalText, analyzedQuestion)
     }
 
+    func testSwitchingToInterviewCopilotAnalyzesAlreadyRecognizedQuestion() async {
+        let engine = AudioTranscriptionEngine.shared
+        let previousHandler = engine.onRecognitionEvent
+        let previousSegmentHandler = engine.onSegmentReceived
+        let previousMode = GhostWindowManager.shared.currentMode
+        var tracker = RecognitionSessionTracker()
+        let identity = tracker.beginSession()
+        let subtitleExpectation = expectation(description: "Recognized question is translated in subtitle mode")
+        let copilotExpectation = expectation(description: "Existing question is analyzed after switching modes")
+        let question = "Tell me about a difficult project."
+        var analyzedQuestion = ""
+        let appState = AppState(
+            restartRecognitionStream: {},
+            interviewPromptGenerator: { text in
+                analyzedQuestion = text
+                copilotExpectation.fulfill()
+                return InterviewPromptResult(
+                    questionSummary: "สรุปคำถาม",
+                    bulletPoints: ["ใช้ตัวอย่างที่วัดผลได้"],
+                    rawText: "response"
+                )
+            },
+            subtitleTranslator: { _ in
+                subtitleExpectation.fulfill()
+                return "คำแปล"
+            }
+        )
+        defer {
+            appState.clear()
+            engine.onRecognitionEvent = previousHandler
+            engine.onSegmentReceived = previousSegmentHandler
+            GhostWindowManager.shared.currentMode = previousMode
+        }
+
+        GhostWindowManager.shared.currentMode = .subtitleBar
+        engine.onRecognitionEvent?(.snapshot(snapshot(
+            identity: identity,
+            transcript: question,
+            isFinal: true
+        )))
+        await fulfillment(of: [subtitleExpectation], timeout: 1)
+
+        GhostWindowManager.shared.currentMode = .interviewPrompter
+        await fulfillment(of: [copilotExpectation], timeout: 1)
+
+        XCTAssertEqual(analyzedQuestion, question)
+    }
+
     private func snapshot(
         identity: RecognitionStreamIdentity,
         transcript: String,
