@@ -31,6 +31,12 @@ public struct InterviewPrompterView: View {
                             .font(.system(size: 10))
                             .foregroundColor(.cyan)
                     }
+                } else if case .error(let message) = appState.aiStatus {
+                    Text(message)
+                        .font(.system(size: 10))
+                        .foregroundColor(.red.opacity(0.9))
+                        .lineLimit(1)
+                        .help(message)
                 } else if appState.latencyMs > 0 {
                     Text("\(appState.latencyMs)ms")
                         .font(.system(size: 10, design: .monospaced))

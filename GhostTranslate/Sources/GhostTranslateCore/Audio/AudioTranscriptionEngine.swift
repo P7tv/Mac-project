@@ -39,7 +39,6 @@ public final class AudioTranscriptionEngine: ObservableObject {
     private var recognitionRequest: SFSpeechAudioBufferRecognitionRequest?
     private var recognitionTask: SFSpeechRecognitionTask?
     private var sessionTracker = RecognitionSessionTracker()
-    private var streamIdentity: RecognitionStreamIdentity?
 
     public init() {
         self.speechRecognizer = SFSpeechRecognizer(locale: selectedLocale)
@@ -175,7 +174,6 @@ public final class AudioTranscriptionEngine: ObservableObject {
 
         self.audioEngine = engine
         self.recognitionRequest = request
-        self.streamIdentity = identity
         self.currentTranscript = ""
 
         inputNode.removeTap(onBus: 0)
@@ -191,7 +189,7 @@ public final class AudioTranscriptionEngine: ObservableObject {
             Task { @MainActor in
                 guard let self = self,
                       self.isRecording,
-                      self.streamIdentity == identity else { return }
+                      self.sessionTracker.accepts(identity) else { return }
 
                 if let result = result {
                     let transcription = result.bestTranscription
@@ -265,6 +263,5 @@ public final class AudioTranscriptionEngine: ObservableObject {
             engine.inputNode.removeTap(onBus: 0)
         }
         audioEngine = nil
-        streamIdentity = nil
     }
 }

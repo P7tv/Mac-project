@@ -70,11 +70,35 @@ public final class AppState: ObservableObject {
     private var latestChunkingRevision: UInt64 = 0
     private var lastPreviewRequest: SentenceTranslationInput?
     private var cancellables = Set<AnyCancellable>()
+    private let restartRecognitionStream: @MainActor () -> Void
+    private let interviewPromptGenerator: @MainActor (String) async throws -> InterviewPromptResult
+    private let subtitleTranslator: @MainActor (SentenceTranslationInput) async throws -> String
 
     private let pausePreviewDelay: UInt64 = 350_000_000
     private let checkpointDelay: UInt64 = 4_000_000_000
     
-    public init() {
+    public convenience init() {
+        self.init(
+            restartRecognitionStream: nil,
+            interviewPromptGenerator: nil,
+            subtitleTranslator: nil
+        )
+    }
+
+    init(
+        restartRecognitionStream: (@MainActor () -> Void)?,
+        interviewPromptGenerator: (@MainActor (String) async throws -> InterviewPromptResult)?,
+        subtitleTranslator: (@MainActor (SentenceTranslationInput) async throws -> String)?
+    ) {
+        self.restartRecognitionStream = restartRecognitionStream ?? {
+            AudioTranscriptionEngine.shared.restartRecognitionStream()
+        }
+        self.interviewPromptGenerator = interviewPromptGenerator ?? { question in
+            try await TyphoonService.shared.generateInterviewPrompts(question: question)
+        }
+        self.subtitleTranslator = subtitleTranslator ?? { input in
+            try await TyphoonService.shared.translateSubtitle(text: input.text, context: input.context)
+        }
         let storedKey = UserDefaults.standard.string(forKey: "ghost_typhoon_api_key") ?? ""
         let storedModel = UserDefaults.standard.string(forKey: "ghost_typhoon_model") ?? "typhoon-v2.5-30b-a3b-instruct"
         let storedFontSize = UserDefaults.standard.double(forKey: "ghost_font_size")
@@ -116,6 +140,7 @@ public final class AppState: ObservableObject {
                 sessionID: snapshot.sessionID,
                 expectedRevision: update.revision
             )
+            let finalizedInput = finalizedTranslationInput(for: update.finalized)
             if currentInput != lastPreviewRequest {
                 if lastPreviewRequest != nil {
                     previewTranslationGate.invalidate()
@@ -125,14 +150,14 @@ public final class AppState: ObservableObject {
                 }
                 lastPreviewRequest = nil
             }
-            if !update.finalized.isEmpty {
+            if let finalizedInput {
                 previewTranslationGate.invalidate()
                 lastPreviewRequest = nil
                 translatedText = ""
                 if aiStatus == .translating {
                     aiStatus = .idle
                 }
-                translateFinalized(update.finalized.last!)
+                translateFinalized(finalizedInput)
                 checkpointTask?.cancel()
                 checkpointTask = nil
             }
@@ -145,8 +170,8 @@ public final class AppState: ObservableObject {
                 scheduleCheckpoint(sessionID: snapshot.sessionID)
             } else {
                 cancelPreviewTimers()
-                if let latestFinal = update.finalized.last {
-                    originalText = latestFinal.text
+                if let finalizedInput {
+                    originalText = finalizedInput.text
                 }
             }
 
@@ -166,12 +191,23 @@ public final class AppState: ObservableObject {
             if activeRecognitionSessionID == sessionID {
                 activeRecognitionSessionID = nil
             }
-            if let finalInput = update.finalized.last {
+            if let finalInput = finalizedTranslationInput(for: update.finalized) {
                 translatedText = ""
                 originalText = finalInput.text
                 translateFinalized(finalInput)
             }
         }
+    }
+
+    private func finalizedTranslationInput(
+        for inputs: [SentenceTranslationInput]
+    ) -> SentenceTranslationInput? {
+        guard let latest = inputs.last else { return nil }
+        guard windowManager.currentMode == .interviewPrompter else { return latest }
+        return SentenceTranslationInput(
+            text: inputs.map(\.text).joined(separator: " "),
+            context: nil
+        )
     }
 
     private func schedulePausePreview(sessionID: UUID, revision: UInt64) {
@@ -231,6 +267,9 @@ public final class AppState: ObservableObject {
             return
         }
         lastPreviewRequest = input
+        if windowManager.currentMode == .interviewPrompter {
+            interviewResult = nil
+        }
         let ticket = previewTranslationGate.issue()
         aiStatus = .translating
         Task {
@@ -242,15 +281,12 @@ public final class AppState: ObservableObject {
         let startTime = DispatchTime.now()
         do {
             if windowManager.currentMode == .interviewPrompter {
-                let result = try await typhoon.generateInterviewPrompts(question: input.text)
+                let result = try await interviewPromptGenerator(input.text)
                 guard previewTranslationGate.accepts(ticket) else { return }
                 interviewResult = result
                 translatedText = result.questionSummary
             } else {
-                let translation = try await typhoon.translateSubtitle(
-                    text: input.text,
-                    context: input.context
-                )
+                let translation = try await subtitleTranslator(input)
                 guard previewTranslationGate.accepts(ticket) else { return }
                 translatedText = translation
             }
@@ -266,13 +302,15 @@ public final class AppState: ObservableObject {
     }
 
     private func translateFinalized(_ input: SentenceTranslationInput) {
+        if windowManager.currentMode == .interviewPrompter {
+            requestPreview(input)
+            return
+        }
+
         let ticket = finalizedTranslationGate.issue()
         Task {
             do {
-                let translation = try await typhoon.translateSubtitle(
-                    text: input.text,
-                    context: input.context
-                )
+                let translation = try await subtitleTranslator(input)
                 guard finalizedTranslationGate.accepts(ticket) else { return }
                 previousLine = SubtitleLine(original: input.text, translation: translation)
             } catch {
@@ -354,7 +392,7 @@ public final class AppState: ObservableObject {
         activeRecognitionSessionID = nil
         lastPreviewRequest = nil
         chunker.reset()
-        audioEngine.restartRecognitionStream()
+        restartRecognitionStream()
         originalText = ""
         translatedText = ""
         previousLine = nil

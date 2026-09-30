@@ -24,6 +24,17 @@ final class AudioTranscriptionTests: XCTestCase {
         XCTAssertNotEqual(nextStream.streamID, first.streamID)
     }
 
+    func testRecognitionTrackerRejectsCallbacksFromRotatedStream() {
+        var tracker = RecognitionSessionTracker()
+        let previousStream = tracker.beginSession()
+        XCTAssertTrue(tracker.accepts(previousStream))
+
+        let currentStream = tracker.beginStream()
+
+        XCTAssertFalse(tracker.accepts(previousStream))
+        XCTAssertTrue(tracker.accepts(currentStream))
+    }
+
     func testEndingSessionCreatesANewSessionOnNextStart() {
         var tracker = RecognitionSessionTracker()
         let first = tracker.beginSession()

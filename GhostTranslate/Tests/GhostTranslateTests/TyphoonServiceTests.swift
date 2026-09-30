@@ -45,6 +45,21 @@ final class TyphoonServiceTests: XCTestCase {
         XCTAssertEqual(structured.bulletPoints.count, 3)
     }
 
+    func testInterviewPromptsParsingRemovesNumberedAndUnicodeBulletMarkers() {
+        let parsed = Prompts.parseInterviewResponse("""
+        **สรุปคำถาม:** เล่าถึงความสำเร็จของคุณ
+        1. ระบุสถานการณ์และเป้าหมาย
+        2) อธิบายสิ่งที่ลงมือทำ
+        • สรุปผลลัพธ์ที่วัดได้
+        """)
+
+        XCTAssertEqual(parsed.bulletPoints, [
+            "ระบุสถานการณ์และเป้าหมาย",
+            "อธิบายสิ่งที่ลงมือทำ",
+            "สรุปผลลัพธ์ที่วัดได้"
+        ])
+    }
+
     func testContextPromptTranslatesOnlyCurrentSentence() {
         let prompt = Prompts.subtitleUserPrompt(
             currentSentence: "I shipped the feature.",

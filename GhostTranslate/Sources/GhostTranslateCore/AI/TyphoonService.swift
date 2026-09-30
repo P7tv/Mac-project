@@ -29,8 +29,6 @@ public actor TyphoonService {
     private let defaultBaseURL = "https://api.opentyphoon.ai/v1"
     private let defaultModel = "typhoon-v2.5-30b-a3b-instruct"
     
-    // Default fallback to user's known working key in workspace
-    private let fallbackAPIKey = "sk-VL6FVfEvqs8uY4fo5CfiKqnG6Wy2Kf2jwrXC3HQjGEPemPmR"
     
     private var customAPIKey: String?
     private var customModel: String?
@@ -55,7 +53,7 @@ public actor TyphoonService {
         if let env = ProcessInfo.processInfo.environment["TYPHOON_API_KEY"], !env.isEmpty {
             return env
         }
-        return fallbackAPIKey
+        return nil
     }
     
     private func resolveModel() -> String {

@@ -81,9 +81,9 @@ public enum Prompts {
                 } else {
                     summary = line
                 }
-            } else if line.hasPrefix("- ") || line.hasPrefix("* ") || (line.count > 2 && line.prefix(2).contains(".")) {
+            } else if line.range(of: "^(?:[-*•]\\s+|\\d+[.)]\\s+)", options: .regularExpression) != nil {
                 let cleaned = line
-                    .replacingOccurrences(of: "^[-*•]\\s*", with: "", options: .regularExpression)
+                    .replacingOccurrences(of: "^(?:[-*•]\\s+|\\d+[.)]\\s+)", with: "", options: .regularExpression)
                     .trimmingCharacters(in: .whitespaces)
                 if !cleaned.isEmpty {
                     bullets.append(cleaned)
