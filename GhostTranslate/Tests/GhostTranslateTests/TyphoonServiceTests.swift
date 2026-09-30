@@ -60,6 +60,19 @@ final class TyphoonServiceTests: XCTestCase {
         ])
     }
 
+    func testInterviewPromptsParsingReadsSummaryBelowMarkdownHeader() {
+        let parsed = Prompts.parseInterviewResponse("""
+        **สรุปคำถาม:**
+        ผู้สัมภาษณ์ถามถึงวิธีรับมือกับโครงการที่ท้าทาย
+        - เล่าสถานการณ์และเป้าหมาย
+        - อธิบายการลงมือทำ
+        - ระบุผลลัพธ์ที่วัดได้
+        """)
+
+        XCTAssertEqual(parsed.questionSummary, "ผู้สัมภาษณ์ถามถึงวิธีรับมือกับโครงการที่ท้าทาย")
+        XCTAssertEqual(parsed.bulletPoints.count, 3)
+    }
+
     func testContextPromptTranslatesOnlyCurrentSentence() {
         let prompt = Prompts.subtitleUserPrompt(
             currentSentence: "I shipped the feature.",

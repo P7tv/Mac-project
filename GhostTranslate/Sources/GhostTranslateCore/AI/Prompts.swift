@@ -69,37 +69,56 @@ public enum Prompts {
         let lines = text.components(separatedBy: .newlines)
         var summary = ""
         var bullets: [String] = []
+        var expectsSummaryOnNextLine = false
         
         for rawLine in lines {
             let line = rawLine.trimmingCharacters(in: .whitespaces)
             if line.isEmpty { continue }
             
-            if line.contains("สรุปคำถาม") {
-                let parts = line.components(separatedBy: ":")
-                if parts.count > 1 {
-                    summary = parts.dropFirst().joined(separator: ":")
-                        .trimmingCharacters(in: .whitespaces)
-                        .replacingOccurrences(
-                            of: "^\\*+\\s*|\\s*\\*+$",
-                            with: "",
-                            options: .regularExpression
-                        )
-                        .trimmingCharacters(in: .whitespaces)
+            if let labelRange = line.range(of: "สรุปคำถาม") {
+                let inlineSummary = String(line[labelRange.upperBound...])
+                    .replacingOccurrences(
+                        of: "^[\\s:*：]+",
+                        with: "",
+                        options: .regularExpression
+                    )
+                    .replacingOccurrences(
+                        of: "^\\*+\\s*|\\s*\\*+$",
+                        with: "",
+                        options: .regularExpression
+                    )
+                    .trimmingCharacters(in: .whitespaces)
+                if inlineSummary.isEmpty {
+                    expectsSummaryOnNextLine = true
                 } else {
-                    summary = line
+                    summary = inlineSummary
+                    expectsSummaryOnNextLine = false
                 }
             } else if line.range(of: "^(?:[-*•]\\s+|\\d+[.)]\\s+)", options: .regularExpression) != nil {
+                expectsSummaryOnNextLine = false
                 let cleaned = line
                     .replacingOccurrences(of: "^(?:[-*•]\\s+|\\d+[.)]\\s+)", with: "", options: .regularExpression)
                     .trimmingCharacters(in: .whitespaces)
                 if !cleaned.isEmpty {
                     bullets.append(cleaned)
                 }
+            } else if expectsSummaryOnNextLine {
+                summary = line
+                    .replacingOccurrences(
+                        of: "^\\*+\\s*|\\s*\\*+$",
+                        with: "",
+                        options: .regularExpression
+                    )
+                    .trimmingCharacters(in: .whitespaces)
+                expectsSummaryOnNextLine = false
             }
         }
         
         if summary.isEmpty {
-            summary = lines.first(where: { !$0.trimmingCharacters(in: .whitespaces).isEmpty }) ?? text
+            summary = lines.first(where: {
+                let candidate = $0.trimmingCharacters(in: .whitespaces)
+                return !candidate.isEmpty && !candidate.contains("สรุปคำถาม")
+            }) ?? ""
         }
         
         return InterviewPromptResult(
